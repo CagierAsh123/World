@@ -1983,34 +1983,54 @@ window.WORLD_ENGINE_UI = (function() {
   function buildInputButton() {
     if (document.getElementById('we-input-btn')) return;
 
-    const selectors = ['#quickReplyBlock', '#send_but'];
-    let container = null;
-    for (const sel of selectors) {
-      const el = document.querySelector(sel);
-      if (el) { container = el; break; }
-    }
-    if (!container) return;
-    if (container.id === 'send_but') container = container.parentNode;
-
     const btn = document.createElement('button');
     btn.id = 'we-input-btn';
     btn.type = 'button';
-    btn.className = 'menu_button interactable';
-    btn.innerHTML = '<i class="fa-solid fa-earth-asia"></i>';
     btn.title = '世界引擎';
-    Object.assign(btn.style, {
-      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-      margin: '0 4px', padding: '4px 8px', cursor: 'pointer'
-    });
-    btn.addEventListener('click', () => {
-      buildPanel();
-      togglePanel();
-    });
-    container.appendChild(btn);
+    btn.innerHTML = '<i class="fa-solid fa-earth-asia"></i>';
+    btn.className = 'menu_button interactable';
+    btn.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;margin:0 4px;padding:4px 8px;cursor:pointer;';
+    btn.onclick = () => togglePanel();
+
+    const selectors = [
+      '#quickReplyBlock',
+      '#send_but',
+      '#send_form',
+      '#form_sheld',
+      '#chatbar',
+      '#send_textarea',
+      'textarea'
+    ];
+
+    let target = null;
+    for (const sel of selectors) {
+      target = document.querySelector(sel);
+      if (target) break;
+    }
+
+    if (target) {
+      if (target.tagName === 'TEXTAREA') target.parentElement.appendChild(btn);
+      else target.appendChild(btn);
+    } else {
+      document.body.appendChild(btn);
+      btn.style.position = 'fixed';
+      btn.style.right = '72px';
+      btn.style.bottom = '16px';
+      btn.style.zIndex = '9999';
+    }
 
     const statusIndicator = document.createElement('span');
     statusIndicator.id = 'we-external-status';
-    container.appendChild(statusIndicator);
+    statusIndicator.className = 'we-external-status';
+    if (target) {
+      target.tagName === 'TEXTAREA' ? target.parentElement.appendChild(statusIndicator) : target.appendChild(statusIndicator);
+    } else {
+      document.body.appendChild(statusIndicator);
+      statusIndicator.style.position = 'fixed';
+      statusIndicator.style.right = '108px';
+      statusIndicator.style.bottom = '18px';
+      statusIndicator.style.zIndex = '9999';
+    }
 
     window.__WE_SetExternalStatus = function(text, isError) {
       const el = document.getElementById('we-external-status');
@@ -2023,6 +2043,8 @@ window.WORLD_ENGINE_UI = (function() {
         }, 3000);
       }
     };
+
+    buildPanel();
   }
 
   return { buildPanel, buildInputButton, showPanel, hidePanel, togglePanel, refresh, setStatus, setEvolvingUI };

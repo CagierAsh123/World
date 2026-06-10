@@ -236,12 +236,10 @@
       }
 
       // ========== 添加面板入口按钮到酒馆输入栏 ==========
-      // 已移至 world-engine-ui.js 的 buildInputButton()，下面直接调用
+      // 已移至 world-engine-ui.js 的 buildInputButton()
 
-      // 先构建面板（隐藏），再添加按钮
       ui.buildPanel();
       ui.buildInputButton();
-      // DOM 可能已 ready 也可能还没，兜底一次
       if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => ui.buildInputButton());
       }
