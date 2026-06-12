@@ -868,6 +868,13 @@ window.WORLD_ENGINE_UI = (function() {
           <option value="">-- 选择模型 --</option>
         </select>
       </div>
+      <div class="we-input-group">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+          <input type="checkbox" id="we-inject-into-prompt" ${settings.injectIntoPrompt !== false ? 'checked' : ''}>
+          注入正文
+        </label>
+        <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">关闭后不会将当前状态或存档点注入聊天正文。</div>
+      </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
         <button class="we-btn" id="we-save-settings">💾 保存设置</button>
         <button class="we-btn we-btn-danger" id="we-reset-world" style="margin-left:0;">🗑️ 重置世界</button>
@@ -1514,10 +1521,12 @@ window.WORLD_ENGINE_UI = (function() {
         const ns = {
           apiUrl: document.getElementById('we-api-url')?.value || '',
           apiKey: document.getElementById('we-api-key')?.value || '',
-          model: document.getElementById('we-model')?.value || 'gpt-3.5-turbo'
+          model: document.getElementById('we-model')?.value || 'gpt-3.5-turbo',
+          injectIntoPrompt: document.getElementById('we-inject-into-prompt')?.checked !== false
         };
         localStorage.setItem('world_engine_settings', JSON.stringify(ns));
         if (window.WORLD_ENGINE_API) window.WORLD_ENGINE_API.getSettings(true);
+        window.WORLD_ENGINE?.applyInjection?.();
         showToast('✅ 设置已保存');
       };
     }
@@ -1724,7 +1733,8 @@ window.WORLD_ENGINE_UI = (function() {
         localStorage.setItem('world_engine_settings', JSON.stringify({
           apiUrl: document.getElementById('we-api-url')?.value || '',
           apiKey: document.getElementById('we-api-key')?.value || '',
-          model: document.getElementById('we-model')?.value || ''
+          model: document.getElementById('we-model')?.value || '',
+          injectIntoPrompt: document.getElementById('we-inject-into-prompt')?.checked !== false
         }));
         if (api.getSettings) api.getSettings(true);
         fetchBtn.disabled = true;

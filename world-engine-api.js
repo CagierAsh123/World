@@ -14,7 +14,8 @@ window.WORLD_ENGINE_API = (function() {
       apiKey: '',
       model: 'gpt-3.5-turbo',
       temperature: 0.7,
-      maxTokens: 2000
+      maxTokens: 2000,
+      injectIntoPrompt: true
     };
     return cachedSettings;
   }

@@ -46,6 +46,7 @@
       }
 
       const core = window.WORLD_ENGINE_CORE;
+      const api = window.WORLD_ENGINE_API;
       const ledger = window.WORLD_ENGINE_LEDGER;
       const evolution = window.WORLD_ENGINE_EVOLUTION;
       const inject = window.WORLD_ENGINE_INJECT;
@@ -122,6 +123,11 @@
       // stateOverride: 传入则使用该状态（重 roll 时用存档点），否则用当前状态
       function applyInjection(stateOverride) {
         try {
+          if (api.getSettings(true).injectIntoPrompt === false) {
+            unregisterInjection();
+            console.log('[世界引擎] 正文注入已在设置中关闭');
+            return;
+          }
           const ctx = SillyTavern.getContext();
           if (!ctx) return;
           const state = stateOverride || core.loadState();
