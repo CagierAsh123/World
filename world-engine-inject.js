@@ -38,6 +38,27 @@ window.WORLD_ENGINE_INJECT = (function() {
   // 旧存档兼容：六级时期的"小有名气"归入"受人尊敬"
   const REP_LEGACY = { 小有名气: '受人尊敬' };
 
+  // 势力运势判词：把运势词翻译成「这势力眼下什么处境、内部团不团结」
+  const STATUS_VERDICT = {
+    鼎盛: '钱粮充裕、人手鼎盛，内部上下一心、铁板一块，行事带着不容置疑的底气与排场',
+    稳固: '运转如常、根基稳健，无明显内忧外患，按部就班地推进既定事务',
+    倾轧: '架子还撑着，内里却派系倾轧、核心不和，许多决策都因内斗而迟滞、自相掣肘',
+    困顿: '资源枯竭或被外部封锁，正咬牙硬撑，处处捉襟见肘，经不起再受打击',
+    衰落: '已失去关键支柱、地盘或核心人物，人心浮动、节节败退，正一步步滑向瓦解',
+    瓦解: '名存实亡、只剩空架子，号令难出、众叛亲离，随时可能彻底散伙',
+  };
+
+  // 势力关系判词：把关系词翻译成「这势力对{{user}}的行为倾向」
+  const RELATION_VERDICT = {
+    血盟: '与{{user}}生死与共、绝对信任，会不惜代价相助，视其安危如自身存亡',
+    盟友: '与{{user}}地位平等、互为奥援，在共同利益上主动支援、共享情报，但各有底线',
+    友好: '认可{{user}}，愿意优先合作、行个方便、释放善意，尚未到结盟交心的地步',
+    中立: '对{{user}}不亲不疏，一切按自身利害行事，无既定立场',
+    冷淡: '已注意到{{user}}但兴致缺缺，保持距离、不愿深交，暂无主动行动的打算',
+    敌对: '与{{user}}公开对立，会在明处施压、阻挠、为难，乃至寻机正面冲突',
+    世仇: '与{{user}}不死不休，必欲除之而后快，会不择手段、持续寻隙下死手',
+  };
+
   // 经济气候判词：把单个气候词翻译成给正文模型看的市面描述
   const CLIMATE_VERDICT = {
     繁荣: '市面繁盛，商路通畅、百业兴旺，钱货流转顺畅，物价稳中偏高',
@@ -65,21 +86,26 @@ window.WORLD_ENGINE_INJECT = (function() {
       return txt;
     }).join('；') || '无';
 
-    // 势力：排除友好/中立/冷淡，只注入极端关系
-    const visibleFactions = (worldState.factions || []).filter(f =>
-      !['友好','中立','冷淡'].includes(f.relation)
-    );
-    const factionsText = visibleFactions.map(f => {
-      let txt = `${f.name}`;
-      const parts = [];
-      if (f.status) parts.push(`运势:${f.status}`);
-      if (f.relation) parts.push(`关系:${f.relation}`);
-      if (f.scope) parts.push(`范围:${f.scope}`);
-      if (f.currentGoal) parts.push(`目标:${f.currentGoal}`);
-      if (f.core_person) parts.push(`核心:${f.core_person}`);
-      if (f.powerPillars?.length) parts.push(`支柱:${f.powerPillars.join('/')}`);
-      return txt + '(' + parts.join(', ') + ')';
-    }).join('；') || '无';
+    // 势力：全部7级关系都注入，渲染成自然语句，运势/关系各带判词
+    const formatPillars = (arr) => arr.length === 1
+      ? arr[0]
+      : arr.slice(0, -1).join('、') + '与' + arr[arr.length - 1];
+    const allFactions = worldState.factions || [];
+    const factionsText = allFactions.length
+      ? '\n' + allFactions.map(f => {
+          const statusDesc = STATUS_VERDICT[f.status] || (f.status ? `处于「${f.status}」之中` : '处境不明');
+          const relation = f.relation || '中立';
+          const relationDesc = RELATION_VERDICT[relation] || `对{{user}}的态度为「${relation}」`;
+          let s = `- ${f.name}眼下${statusDesc}；它对{{user}}的态度是${relation}——${relationDesc}。`;
+          if (f.scope) s += `其势力范围覆盖${f.scope}。`;
+          if (f.currentGoal) s += `当前正致力于${f.currentGoal}。`;
+          const tail = [];
+          if (f.core_person) tail.push(`核心人物是${f.core_person}`);
+          if (f.powerPillars?.length) tail.push(`赖以运转的根基是${formatPillars(f.powerPillars)}`);
+          if (tail.length) s += tail.join('，') + '。';
+          return s;
+        }).join('\n')
+      : '无';
 
     // 风声：只注入 Lv3/4
     const windTypeNames = { announcement: '公告', report: '消息', rumor: '流言', sentiment: '舆情' };
