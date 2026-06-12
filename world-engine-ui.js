@@ -208,6 +208,7 @@ window.WORLD_ENGINE_UI = (function() {
 
   function renderEventList(events, scope) {
     if (!events || !events.length) return '<div class="we-empty">暂无事件链</div>';
+    const curRound = (core.loadState() || {}).round || 0;
     return renderPagedList(events, 'events-' + scope, (e, eventIndex) => {
       const stageColors = {
         萌芽:'#d6b85a',
@@ -256,6 +257,17 @@ window.WORLD_ENGINE_UI = (function() {
       }
       const typeName = e.type === 'progress' ? '推进型' : '冲突型';
       const typeColor = e.type === 'progress' ? '#57b7a8' : '#cf5f3f';
+      // 正面终局倒计时徽标（已爆发/已完成，保留 2+level*2 轮后自动清退）
+      let countdownHtml = '';
+      const POSITIVE_TERMINALS = ['已爆发', '已完成'];
+      if (POSITIVE_TERMINALS.includes(e.stage) && e._terminalSince !== undefined) {
+        const keepRounds = 2 + (e.level || 1) * 2;
+        const left = keepRounds - (curRound - e._terminalSince) + 1;
+        if (left >= 1) {
+          const cdColor = e.stage === '已完成' ? '#6fc28a' : '#e07465';
+          countdownHtml = ` <span class="we-badge we-event-countdown" style="color:${cdColor};" title="该事件在 ${left} 轮后自动清退"><i class="fa-regular fa-clock"></i>剩余${left}轮</span>`;
+        }
+      }
       const terminalBg = {
         已完成: '#244a34',
         已爆发: '#5a2528',
@@ -292,7 +304,7 @@ window.WORLD_ENGINE_UI = (function() {
       const editHtml = isEditing ? renderEventEditor(e, scope, eventIndex) : '';
       return `<div class="${itemClass}" style="${itemStyle}">
         ${stampHtml}
-        <div class="we-event-name"><span style="color:${levelColor};">${u(e.name)}</span> <span class="we-badge" style="background:${levelColor}22;color:${levelColor};">Lv.${e.level||'?'}</span> <span class="we-badge" style="background:${typeColor}22;color:${typeColor};">${typeName}</span>${stageBadge}${extras}</div>
+        <div class="we-event-name"><span style="color:${levelColor};">${u(e.name)}</span> <span class="we-badge" style="background:${levelColor}22;color:${levelColor};">Lv.${e.level||'?'}</span> <span class="we-badge" style="background:${typeColor}22;color:${typeColor};">${typeName}</span>${countdownHtml}${stageBadge}${extras}</div>
         ${metaText ? `<div class="we-event-meta" ${metaStyle}>${metaText}</div>` : ''}
         ${editHtml}
         ${actionHtml}

@@ -804,8 +804,20 @@ ${extraInstruction ? '\n' + extraInstruction : ''}`;
       }
 
       // 自动清理：已消散/已失败的事件链 & 已结束的天下大势
+      // - 负面终局（已消散/已失败）：下一轮即删
+      // - 正面终局（已爆发/已完成）：进入终局起保留 2+level*2 轮（Lv1=4/Lv2=6/Lv3=8/Lv4=10），
+      //   留出余波铺陈时间，到期自动清退
+      const POSITIVE_TERMINALS = ['已爆发', '已完成'];
       const cleanedEvents = (state.events || []).filter(e => {
-        return e.stage !== '已消散' && e.stage !== '已失败';
+        if (e.stage === '已消散' || e.stage === '已失败') return false;
+        if (POSITIVE_TERMINALS.includes(e.stage)) {
+          if (e._terminalSince === undefined) e._terminalSince = state.round;
+          const keepRounds = 2 + (e.level || 1) * 2;
+          return (state.round - e._terminalSince) < keepRounds;
+        }
+        // 非终局：清掉可能残留的倒计时标记（被 API 改回非终局阶段时）
+        if (e._terminalSince !== undefined) delete e._terminalSince;
+        return true;
       });
       if (cleanedEvents.length !== (state.events || []).length) {
         const removed = (state.events || []).filter(e => !cleanedEvents.includes(e));

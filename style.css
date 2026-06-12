@@ -1053,6 +1053,26 @@
   color: var(--we-danger);
 }
 
+/* 正面终局（已爆发/已完成）的自动清退倒计时 */
+.we-event-countdown {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid currentColor;
+  border-radius: 8px;
+  padding: 0 7px;
+  opacity: 0.92;
+  animation: we-countdown-pulse 2.2s ease-in-out infinite;
+}
+.we-event-countdown i {
+  font-size: 9px;
+}
+@keyframes we-countdown-pulse {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
+}
+
 /* ===== 按钮 ===== */
 .we-btn {
   background: var(--we-surface);
