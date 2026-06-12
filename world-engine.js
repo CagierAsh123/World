@@ -257,13 +257,17 @@
             if (cs.roundCounter >= everyX) {
               cs.roundCounter = 0;
               doEvolve = true;
+              // 记下本层为「推演轮」，与推演是否成功/被中止无关，供重 roll 判定
+              cs.lastEvolveLayer = L;
             } else {
               doEvolve = false;
             }
             core.saveState(cs);
           } else {
-            // 重 roll（层数没增长）：只有重 roll 的正是「推演轮」才重推，计数器不动
-            doEvolve = (lastEvolved > 0 && L === lastEvolved);
+            // 重 roll（层数没增长）：只有重 roll 的正是「推演轮」才重推，计数器不动。
+            // 以 lastEvolveLayer 为准（中止过的推演轮也能重推）；lastEvolved 兼容旧存档。
+            doEvolve = (L === (Number(cs.lastEvolveLayer) || 0)) ||
+                       (lastEvolved > 0 && L === lastEvolved);
           }
           if (!doEvolve) {
             lastProcessedMessageKey = currentKey;
