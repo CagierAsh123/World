@@ -70,19 +70,18 @@
       // ========== 注入管理 ==========
       const INJECTION_NAME = 'world-engine-world';
 
-      // position=2 为 in-chat（插入聊天流），depth=1 为用户消息正前一位
-      const INJ_POSITION = 2;
+      // injection_position=1 为 In-Chat（插入聊天流），depth=1 为用户消息正前一位
+      // 与预设 JSON 中 injection_position:1 / injection_depth:1 对应
+      const INJ_POSITION = 1;
       const INJ_DEPTH = 1;
 
       function registerInjection(content) {
         try {
           const ctx = SillyTavern.getContext();
-          // setExtensionPrompt 是最通用的方式，优先使用
           if (typeof ctx.setExtensionPrompt === 'function') {
             ctx.setExtensionPrompt(INJECTION_NAME, content, INJ_POSITION, INJ_DEPTH);
             return true;
           }
-          // 新版 ST: registerInjection
           if (typeof ctx.registerInjection === 'function') {
             if (typeof ctx.unregisterInjection === 'function') {
               ctx.unregisterInjection(INJECTION_NAME);
@@ -90,7 +89,6 @@
             ctx.registerInjection(INJECTION_NAME, content, { position: INJ_POSITION, depth: INJ_DEPTH, role: 'system' });
             return true;
           }
-          // 旧版 ST: extensionPrompts 数组
           if (Array.isArray(ctx.extensionPrompts)) {
             ctx.extensionPrompts = ctx.extensionPrompts.filter(p => p.name !== INJECTION_NAME);
             ctx.extensionPrompts.push({
@@ -111,7 +109,7 @@
         try {
           const ctx = SillyTavern.getContext();
           if (typeof ctx.setExtensionPrompt === 'function') {
-            ctx.setExtensionPrompt(INJECTION_NAME, '', INJ_POSITION, INJ_DEPTH);
+            ctx.setExtensionPrompt(INJECTION_NAME, '', INJ_POSITION, INJ_DEPTH); // 清空内容即为取消注入
           } else if (typeof ctx.unregisterInjection === 'function') {
             ctx.unregisterInjection(INJECTION_NAME);
           } else if (Array.isArray(ctx.extensionPrompts)) {
