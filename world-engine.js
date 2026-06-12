@@ -63,7 +63,6 @@
       }
 
       let isEvolving = false;
-      let lastInjectedRound = -1;
       let autoEvolveTimer = null;
       let lastProcessedMessageKey = '';
       const AUTO_EVOLVE_DELAY = 1500;
@@ -115,23 +114,18 @@
         } catch(e) {}
       }
 
-      // ========== 发送前注入（世界状态+记忆） ==========
-      async function beforeMessageSend() {
+      // ========== 注入世界状态到正文 prompt ==========
+      function applyInjection() {
         try {
           const ctx = SillyTavern.getContext();
           if (!ctx) return;
           const state = core.loadState();
           const currentRound = state.round;
-          if (lastInjectedRound === currentRound) return;
-          lastInjectedRound = currentRound;
 
-          // 构建标签（从聊天历史和状态提取）
           const chatHistory = ctx.chat || [];
           const recentChat = chatHistory.slice(-5);
-          const chatText = recentChat.map(m => m.mes || '').join(' ');
           const recent = recentChat.map(m => (m.mes || '')).join(' ');
 
-          // 从聊天消息中提取实体名做标签
           const tags = [];
           const namePattern = /([一-龥]{2,4})(?:说|道|讲|问|答)/g;
           let m;
@@ -140,19 +134,12 @@
               tags.push(m[1]);
             }
           }
-          // 从状态中加事件和势力相关标签
           for (const ev of state.events || []) tags.push(ev.name);
           for (const f of state.factions || []) tags.push(f.name);
 
           const context = inject.buildContext(state, tags);
 
-          // 保存注入记录供调试
-          state.lastInjection = {
-            timestamp: Date.now(),
-            round: currentRound,
-            context: context,
-            tagsUsed: tags
-          };
+          state.lastInjection = { timestamp: Date.now(), round: currentRound, context, tagsUsed: tags };
           core.saveState(state);
 
           registerInjection(context);
@@ -219,6 +206,7 @@
           if (success) {
             lastProcessedMessageKey = currentKey;
             ledger.recordChanges(state);
+            applyInjection();
             console.log('[世界引擎] ✅ 推演完成，当前第', state.round, '轮');
           } else {
             console.warn('[世界引擎] ⚠️ 推演失败或已中止');
@@ -243,21 +231,18 @@
           core.saveState(state);
           core.clearCheckpoint();
         }
-        lastInjectedRound = -1;
-        unregisterInjection();
-        console.log('[世界引擎] 聊天已加载');
+        applyInjection();
+        console.log('[世界引擎] 聊天已加载，注入已更新');
       }
 
       function onMessageSwiped() {
         clearAutoEvolveTimer();
-        lastInjectedRound = -1;
       }
 
       // ========== 事件绑定 ==========
       const ctx = SillyTavern.getContext();
       if (ctx && ctx.eventSource) {
         const autoEvolveEvent = ctx.event_types?.GENERATION_ENDED || ctx.event_types?.MESSAGE_RECEIVED || 'message_received';
-        ctx.eventSource.on(ctx.event_types?.MESSAGE_SENT || 'message_sent', beforeMessageSend);
         ctx.eventSource.on(autoEvolveEvent, onMessageReceived);
         ctx.eventSource.on(ctx.event_types?.CHAT_LOADED || 'chat_loaded', onChatLoaded);
         ctx.eventSource.on(ctx.event_types?.MESSAGE_SWIPED || 'message_swiped', onMessageSwiped);
@@ -265,6 +250,11 @@
       } else {
         console.warn('[世界引擎] 无法绑定事件');
       }
+
+      // 初始化时立即注入当前世界状态
+      applyInjection();
+      // 暴露 applyInjection 供手动推演调用
+      window.WORLD_ENGINE = { applyInjection };
 
       // ========== 添加面板入口按钮到酒馆输入栏 ==========
       // 已移至 world-engine-ui.js 的 buildInputButton()
