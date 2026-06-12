@@ -23,6 +23,7 @@ window.WORLD_ENGINE_UI = (function() {
   let _wbCachedEntries = null;
   let _wbCachedSelectedIds = null;
   let _wbCachedChatId = null;
+  let _wbScrollTop = 0;
 
   function h(str) {
     if (!str) return '';
@@ -98,6 +99,10 @@ window.WORLD_ENGINE_UI = (function() {
 
     const curLayer = state.chatLayer || getChatLayer();
     const cpLayer = getCheckpointLayer(checkpoint);
+
+    // 保存世界书列表滚动位置，渲染后恢复
+    const _wbListEl = document.getElementById('we-worldbook-list');
+    if (_wbListEl) _wbScrollTop = _wbListEl.scrollTop;
 
     body.innerHTML = `
       <div class="we-tabs">
@@ -1640,6 +1645,8 @@ window.WORLD_ENGINE_UI = (function() {
             };
           });
           updateWorldbookSummary();
+          // 恢复滚动位置（refresh() 重建 DOM 后补回）
+          if (_wbScrollTop) worldbookList.scrollTop = _wbScrollTop;
       }
 
       if (reloadBtn) reloadBtn.onclick = () => { _wbCachedEntries = null; _wbCachedChatId = null; loadWorldbookEntries(); };
