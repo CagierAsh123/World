@@ -1474,12 +1474,10 @@
   background: transparent;
 }
 .we-wind-rumor .we-wind-topic {
-  font-style: italic;
   font-weight: 500;
   opacity: 0.9;
 }
 .we-wind-rumor .we-wind-content span:last-child {
-  font-style: italic;
   color: var(--we-text3);
 }
 .we-wind-rumor .we-wind-field { border-top-color: rgba(255,255,255,0.03); }
