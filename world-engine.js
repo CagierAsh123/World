@@ -280,8 +280,10 @@
               const anchor2 = core.getAnchorLayer() ?? L2;
               const c2 = Math.floor(Math.max(0, L2 - anchor2) / 2);
               if (c2 >= 2 * everyX) {
-                core.setAnchorLayer(L2);
-                console.log('[世界引擎] 🔄 计数锚点重置（已满 2X 轮）');
+                // 退后一个推演窗口，而非 snap 到当前楼层——
+                // 否则当前消息正好压在锚点上 → c=0，重 roll 时算成「未到推演」(0/X)
+                core.setAnchorLayer(L2 - 2 * everyX);
+                console.log('[世界引擎] 🔄 计数锚点退后一窗（已满 2X 轮）');
               }
             }
             // 重 roll 时正文已按楼层注入存档点，推演完成后不覆盖
