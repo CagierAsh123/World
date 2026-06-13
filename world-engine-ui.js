@@ -984,7 +984,7 @@ window.WORLD_ENGINE_UI = (function() {
       return `<div class="we-accident-item we-regional-incident-item we-accident-triggered">
         ${actionHtml}
         ${u(ri.title)}<br>
-        <span style="font-size:11px;color:var(--we-text3);">类型: ${u(getRegionalIncidentTypeLabel(ri.type))} | 范围: ${u(ri.scope||'?')} | 冷却: ${ri.cooldown||0}轮</span><br>
+        <span style="font-size:11px;color:var(--we-text3);">类型: ${u(getRegionalIncidentTypeLabel(ri.type))} | 范围: ${u(ri.scope||'?')} | 剩余: ${ri.duration||0}轮</span><br>
         <span style="font-size:11px;color:var(--we-text2);">${u(ri.impact||'')}</span>
         ${editHtml}
       </div>`;
@@ -1018,6 +1018,7 @@ window.WORLD_ENGINE_UI = (function() {
           <label class="we-event-editor-wide">标题<input class="we-ri-edit-title" type="text" value="${u(ri.title||'')}"></label>
           <label>类型<select class="we-ri-edit-type">${typeOptions}</select></label>
           <label>范围<input class="we-ri-edit-scope" type="text" value="${u(ri.scope||'')}"></label>
+          <label>剩余轮数<input class="we-ri-edit-duration" type="number" min="0" max="99" value="${ri.duration||0}"></label>
           <label>冷却<input class="we-ri-edit-cooldown" type="number" min="0" max="99" value="${ri.cooldown||0}"></label>
           <label class="we-event-editor-wide">影响<textarea class="we-ri-edit-impact" rows="3">${u(ri.impact||'')}</textarea></label>
         </div>
@@ -1660,13 +1661,14 @@ window.WORLD_ENGINE_UI = (function() {
         const editor = button.closest('.we-event-editor');
         const state = core.loadState();
         if (!state.regionalIncident) {
-          state.regionalIncident = { active: false, title: '', type: '', scope: '', impact: '', cooldown: 0, _retry: false, _retryType: '' };
+          state.regionalIncident = { active: false, title: '', type: '', scope: '', impact: '', duration: 0, cooldown: 0, _retry: false, _retryType: '' };
         }
         const ri = state.regionalIncident;
         ri.active = editor.querySelector('.we-ri-edit-active').value === 'true';
         ri.title = editor.querySelector('.we-ri-edit-title').value.trim();
         ri.type = editor.querySelector('.we-ri-edit-type').value;
         ri.scope = editor.querySelector('.we-ri-edit-scope').value.trim();
+        ri.duration = Math.max(0, Number(editor.querySelector('.we-ri-edit-duration').value) || 0);
         ri.cooldown = Math.max(0, Number(editor.querySelector('.we-ri-edit-cooldown').value) || 0);
         ri.impact = editor.querySelector('.we-ri-edit-impact').value.trim();
         core.saveState(state);
