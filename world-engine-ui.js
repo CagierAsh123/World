@@ -308,7 +308,6 @@ window.WORLD_ENGINE_UI = (function() {
       + '<button class="we-btn we-btn-primary" id="we-btn-redo" title="把存档点喂给后台推演，重出本轮结果">重新推演</button>'
       + '<button class="we-btn we-btn-primary" id="we-btn-forward" title="把当前状态喂给后台推演，向前推进一轮">向前推演</button>'
       + '<button class="we-btn we-btn-danger" id="we-btn-abort" style="background:var(--we-danger);color:#fff;" disabled>停止推演</button>'
-      + '<button class="we-btn" id="we-btn-refresh">刷新</button>'
       + '</div>'
       + '<button class="we-icon-btn" id="we-btn-settings-open" title="设置"><i class="fa-solid fa-gear"></i></button>'
       + '</div>'
