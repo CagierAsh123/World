@@ -444,37 +444,54 @@
   pointer-events: none;
 }
 .we-core-title {
+  font-family: "SimSun", "宋体", "Songti SC", "STSong", serif;
   font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 3px;
+  font-weight: 400;
+  letter-spacing: 4px;
   color: var(--we-gold);
 }
+
 .we-core-sub {
-  font-size: 11px;
+  font-family: "SimSun", "宋体", "Songti SC", "STSong", serif;
+  font-size: 12px;
+  font-weight: 400;
   color: var(--we-text3);
   letter-spacing: 2px;
-  margin-top: 3px;
+  margin-top: 4px;
 }
+
 .we-core-pct {
-  font-size: 32px;
-  font-weight: 800;
-  line-height: 1.1;
-  letter-spacing: 1px;
+  font-family: "Times New Roman", Times, Georgia, serif;
+  font-size: 36px;
+  font-weight: 400;
+  line-height: 1.05;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
 }
-.we-core-pct span { font-size: 15px; font-weight: 600; margin-left: 1px; }
+
+.we-core-pct span {
+  font-family: "Times New Roman", Times, Georgia, serif;
+  font-size: 15px;
+  font-weight: 400;
+  margin-left: 2px;
+}
+
 .we-core-tier {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 2px;
-  margin-top: 1px;
-  opacity: 0.85;
+  font-family: "SimSun", "宋体", "Songti SC", "STSong", serif;
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 3px;
+  margin-top: 3px;
+  opacity: 0.9;
 }
+
 .we-core-stats {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   width: 100%;
   border-top: 1px solid var(--we-border);
 }
+
 .we-core-stat {
   display: flex;
   flex-direction: column;
@@ -482,9 +499,26 @@
   gap: 5px;
   padding: 11px 0 3px;
 }
-.we-core-stat + .we-core-stat { border-left: 1px solid rgba(255,255,255,0.045); }
-.we-core-stat-k { font-size: 11px; color: var(--we-text3); letter-spacing: 1px; }
-.we-core-stat-v { font-size: 20px; font-weight: 700; color: var(--we-text); }
+
+.we-core-stat + .we-core-stat {
+  border-left: 1px solid rgba(255,255,255,0.045);
+}
+
+.we-core-stat-k {
+  font-family: "SimSun", "宋体", "Songti SC", "STSong", serif;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--we-text3);
+  letter-spacing: 2px;
+}
+
+.we-core-stat-v {
+  font-family: "Times New Roman", Times, Georgia, serif;
+  font-size: 23px;
+  font-weight: 400;
+  color: var(--we-text);
+  font-variant-numeric: tabular-nums;
+}
 
 /* ===== 摘要 ===== */
 .we-digest {
