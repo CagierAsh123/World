@@ -321,9 +321,9 @@ window.WORLD_ENGINE_UI = (function() {
 
               ${tailGlow}
 
-              <circle cx="${dotX}" cy="${dotY}" r="8" fill="#ffffff" opacity="0.14" filter="url(#weCoreDotGlow)"/>
+              <circle class="we-core-dot-glow" cx="${dotX}" cy="${dotY}" r="8" fill="#ffffff" opacity="0.14" filter="url(#weCoreDotGlow)"/>
               <circle cx="${dotX}" cy="${dotY}" r="4.6" fill="#e8fffb" opacity="0.70"/>
-              <circle cx="${dotX}" cy="${dotY}" r="2.5" fill="#ffffff" opacity="0.95"/>
+              <circle class="we-core-dot-core" cx="${dotX}" cy="${dotY}" r="2.5" fill="#ffffff" opacity="0.95"/>
             </svg>
             <div class="we-core-center">
               <div class="we-core-title">世界核心</div>

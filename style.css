@@ -517,6 +517,27 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* 尾点发光：外晕呼吸 + 亮核明灭 */
+.we-core-dot-glow {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: we-core-dot-glow 2.2s ease-in-out infinite;
+}
+@keyframes we-core-dot-glow {
+  0%, 100% { opacity: 0.12; transform: scale(0.85); }
+  50%      { opacity: 0.42; transform: scale(1.15); }
+}
+.we-core-dot-core {
+  animation: we-core-dot-core 2.2s ease-in-out infinite;
+}
+@keyframes we-core-dot-core {
+  0%, 100% { opacity: 0.8; }
+  50%      { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .we-core-dot-glow, .we-core-dot-core { animation: none !important; }
+}
+
 /* ===== 摘要 ===== */
 .we-digest {
   background: var(--we-bg);
