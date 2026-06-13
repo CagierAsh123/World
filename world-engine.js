@@ -260,7 +260,7 @@
             lastProcessedMessageKey = currentKey;
             const pos = c % everyX || (c === 0 ? 0 : everyX);
             if (window.__WE_SetExternalStatus) {
-              window.__WE_SetExternalStatus(`⏸ 第 ${pos}/${everyX} 轮，未到推演`);
+              window.__WE_SetExternalStatus(`第 ${pos}/${everyX} 轮，未到推演`);
             }
             if (ui) ui.refresh(true);
             return;
@@ -271,7 +271,7 @@
         try {
           const state = core.loadState();
           const isNewRound = core.isNewRound();
-          if (window.__WE_SetExternalStatus) window.__WE_SetExternalStatus('⏳ 推演中...');
+          if (window.__WE_SetExternalStatus) window.__WE_SetExternalStatus('推演中...');
           // 自动推演的显示基底跟随 isNewRound：新轮次→当前状态，重 roll→存档点
           if (ui && ui.setEvolvingUI) ui.setEvolvingUI(true, isNewRound ? 'state' : 'checkpoint');
           if (ui && ui.refresh) ui.refresh(true); // 推演开始：立刻按基底翻面，等出新结果再翻
@@ -300,10 +300,10 @@
           } else {
             console.warn('[世界引擎] ⚠️ 推演失败或已中止');
           }
-          if (window.__WE_SetExternalStatus) window.__WE_SetExternalStatus(success ? '✅ 推演完成' : '❌ 推演失败或已中止', !success);
+          if (window.__WE_SetExternalStatus) window.__WE_SetExternalStatus(success ? '推演完成' : '推演失败或已中止', !success);
         } catch(e) {
           console.error('[世界引擎] 处理失败', e);
-          if (window.__WE_SetExternalStatus) window.__WE_SetExternalStatus('❌ 推演异常: ' + e.message, true);
+          if (window.__WE_SetExternalStatus) window.__WE_SetExternalStatus('推演异常: ' + e.message, true);
         } finally {
           isEvolving = false;
           if (ui) { ui.setEvolvingUI(false); ui.refresh(true); }
