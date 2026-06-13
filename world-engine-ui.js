@@ -207,25 +207,12 @@ window.WORLD_ENGINE_UI = (function() {
     const CLIMATE = { 繁荣:-2, 平稳:0, 衰退:1, 动荡:2 };
     const econP = CLIMATE[(state.economy || {}).climate] || 0;
 
-    // 区域突发：激活 +10
-    const regionP = (state.regionalIncident && state.regionalIncident.active) ? 10 : 0;
+    // 区域突发：激活 +5
+    const regionP = (state.regionalIncident && state.regionalIncident.active) ? 5 : 0;
 
-    // 仇敌：未终结，血仇+2 / 恩怨+1，总封顶 16
-    let enemyP = 0;
-    for (const en of (state.enemies || [])) {
-      if (en.status === '已终结') continue;
-      enemyP += (en.type === 'blood') ? 2 : 1;
-    }
-    enemyP = Math.min(enemyP, 16);
+    // 仇敌、黑盒：按设定不计入世界稳定度
 
-    // 黑盒：每条「暴露」+0.5，总封顶 12
-    let bbP = 0;
-    const bb = state.blackbox || {};
-    for (const a of [].concat(bb.secretActions || [], bb.secretAssets || []))
-      if (a && a.status === '暴露') bbP += 0.5;
-    bbP = Math.min(bbP, 12);
-
-    const pressure = eventP + windP + trendP + factionP + econP + regionP + enemyP + bbP;
+    const pressure = eventP + windP + trendP + factionP + econP + regionP;
     const stability = clamp(Math.round(100 - pressure), 0, 100);
     const tier =
       stability >= 90 ? '天下太平' :
@@ -238,7 +225,7 @@ window.WORLD_ENGINE_UI = (function() {
       stability, tier, pressure: r1(pressure),
       breakdown: {
         事件: r1(eventP), 风声: r1(windP), 大势: r1(trendP), 势力: r1(factionP),
-        经济: r1(econP), 区域: r1(regionP), 仇敌: r1(enemyP), 黑盒: r1(bbP)
+        经济: r1(econP), 区域: r1(regionP)
       }
     };
   }
