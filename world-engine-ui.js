@@ -97,6 +97,8 @@ window.WORLD_ENGINE_UI = (function() {
 
   // 当前视图：'home' | 'situation' | 'events' | 'relations' | 'resources' | 'settings'
   let _currentView = 'home';
+  // 主页导航：单击选中的行（再次单击才进入）
+  let _selectedNavView = null;
   // 推演进行中标志 + 本次推演的显示基底：
   //   'checkpoint' = 重新推演（喂存档点 B，面板显示 B）
   //   'state'      = 向前推演（喂当前状态 A，面板显示 A）
@@ -292,7 +294,8 @@ window.WORLD_ENGINE_UI = (function() {
     const navRows = rows.map((r, i) => {
       const topLine = i === 0 ? '<div class="we-nav-line we-nav-line-hidden"></div>' : '<div class="we-nav-line"></div>';
       const botLine = i === rows.length - 1 ? '<div class="we-nav-line we-nav-line-hidden"></div>' : '<div class="we-nav-line"></div>';
-      return '<div class="we-nav-row" data-view="' + r.view + '">'
+      const sel = _selectedNavView === r.view ? ' we-nav-row--selected' : '';
+      return '<div class="we-nav-row' + sel + '" data-view="' + r.view + '">'
         + '<div class="we-nav-label">' + r.label + '</div>'
         + '<div class="we-nav-track">' + topLine + '<div class="we-nav-dot"></div>' + botLine + '</div>'
         + '<div class="we-nav-content"><span class="we-nav-sub">' + r.sub + '</span><span class="we-nav-poem">' + r.poem + '</span></div>'
@@ -1814,8 +1817,30 @@ window.WORLD_ENGINE_UI = (function() {
     if (settingsOpenBtn) settingsOpenBtn.onclick = () => { _currentView = 'settings'; refresh(); };
 
     document.querySelectorAll('.we-nav-row[data-view]').forEach(row => {
-      row.onclick = () => { _currentView = row.dataset.view; refresh(); };
+      row.onclick = () => {
+        if (_selectedNavView === row.dataset.view) {
+          // 二次点击：进入分页
+          _selectedNavView = null;
+          _currentView = row.dataset.view;
+          refresh();
+        } else {
+          // 首次点击：选中该行
+          _selectedNavView = row.dataset.view;
+          refresh();
+        }
+      };
     });
+
+    // 点击导航列表以外的地方取消选中
+    const panelBody = document.getElementById('we-panel-body');
+    if (panelBody) {
+      panelBody.onclick = (e) => {
+        if (_currentView === 'home' && _selectedNavView && !e.target.closest('.we-nav-row')) {
+          _selectedNavView = null;
+          refresh();
+        }
+      };
+    }
 
     // ===== 区块折叠/展开事件 =====
     document.querySelectorAll('.we-section-toggle').forEach(toggle => {
