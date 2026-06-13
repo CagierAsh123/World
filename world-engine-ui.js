@@ -213,14 +213,14 @@ window.WORLD_ENGINE_UI = (function() {
     // 仇敌、黑盒：按设定不计入世界稳定度
 
     const pressure = eventP + windP + trendP + factionP + econP + regionP;
-    const stability = clamp(Math.round(100 - pressure), 0, 100);
+    const stability = Number(clamp(100 - pressure, 0, 100).toFixed(1));
     const tier =
       stability >= 90 ? '天下太平' :
       stability >= 70 ? '暗流浮动' :
       stability >= 45 ? '局势紧张' :
       stability >= 20 ? '动荡失序' : '崩坏边缘';
 
-    const r1 = v => Math.round(v * 10) / 10;
+    const r1 = v => Number(v.toFixed(1));
     return {
       stability, tier, pressure: r1(pressure),
       breakdown: {
@@ -282,7 +282,7 @@ window.WORLD_ENGINE_UI = (function() {
             <div class="we-core-center">
               <div class="we-core-title">世界核心</div>
               <div class="we-core-sub">稳定度</div>
-              <div class="we-core-pct" style="color:${tierColor};">${stab.stability}<span>%</span></div>
+              <div class="we-core-pct" style="color:${tierColor};">${stab.stability.toFixed(1)}<span>%</span></div>
               <div class="we-core-tier" style="color:${tierColor};">${stab.tier}</div>
             </div>
           </div>
