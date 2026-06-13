@@ -222,6 +222,8 @@
       async function runAutoEvolution(expectedKey, expectedText) {
         autoEvolveTimer = null;
         if (isEvolving || lastProcessedMessageKey === expectedKey) return;
+        // 已有推演（如手动触发）在跑：跳过本次自动推演，避免 evolve() 因 busy 返回 false 被误报为「推演失败」
+        if (evolution.isRunning && evolution.isRunning()) return;
 
         const ctx = SillyTavern.getContext();
         const chat = ctx?.chat || [];

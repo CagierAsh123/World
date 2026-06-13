@@ -1552,6 +1552,12 @@ window.WORLD_ENGINE_UI = (function() {
 
       evolveBtn.onclick = async () => {
         if (isEvolving) return;
+        // 后台已有推演（如自动推演）在跑：提示而非触发，避免 busy 被当成「推演失败」
+        if (evolution.isRunning?.()) {
+          if (window.__WE_SetExternalStatus) window.__WE_SetExternalStatus('⏳ 已有推演进行中...');
+          showToast('⏳ 已有推演进行中，请稍候');
+          return;
+        }
         isEvolving = true;
         setEvolvingUI(true);
         if (window.__WE_SetExternalStatus) window.__WE_SetExternalStatus('⏳ 推演中...');
@@ -2268,9 +2274,17 @@ window.WORLD_ENGINE_UI = (function() {
     ball.classList.remove('we-ball-evolving', 'we-ball-success', 'we-ball-fail');
     clearTimeout(_ballStatusTimer);
 
+    const count = ball.querySelector('.we-ball-count');
+    const clearCount = () => {
+      ball.classList.remove('we-ball-counting');
+      if (count) count.textContent = '';
+      if (ring) ring.style.setProperty('--we-ring-pct', '0deg');
+    };
+
     if (/推演中|⏳/.test(text)) {
       ball.classList.add('we-ball-evolving');
       if (badge) badge.textContent = '';
+      clearCount(); // 推演进行中不展示轮次计数，避免残留旧的 N/X
     } else if (isError || /失败|异常|❌/.test(text)) {
       ball.classList.add('we-ball-fail');
       if (badge) badge.textContent = '✕';
@@ -2278,17 +2292,17 @@ window.WORLD_ENGINE_UI = (function() {
     } else if (/完成|✅/.test(text)) {
       ball.classList.add('we-ball-success');
       if (badge) badge.textContent = '✓';
+      clearCount(); // 推演完成 → 计数已归零，清掉进度环与数字
       _ballStatusTimer = setTimeout(() => clearBallBadge(), 4000);
     }
 
-    // 解析「第 N/X 轮」→ 进度环 + 数字
+    // 解析「第 N/X 轮」→ 进度环 + 数字（仅未到推演的提示态才显示）
     const m = /第\s*(\d+)\s*\/\s*(\d+)\s*轮/.exec(text || '');
     if (ring && m) {
       const cur = Number(m[1]), total = Number(m[2]) || 1;
       const pct = Math.max(0, Math.min(1, cur / total));
       ring.style.setProperty('--we-ring-pct', (pct * 360) + 'deg');
       ball.classList.toggle('we-ball-counting', cur > 0 && cur < total);
-      const count = ball.querySelector('.we-ball-count');
       if (count) count.textContent = (cur < total) ? `${cur}/${total}` : '';
     }
   }
