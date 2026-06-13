@@ -413,30 +413,78 @@
 .we-label { font-size: 11px; color: var(--we-text3); }
 .we-val { font-size: 15px; font-weight: 700; color: var(--we-text); }
 
-/* ===== 世界稳定度 ===== */
-.we-stability { display: flex; flex-direction: column; gap: 7px; }
-.we-stability-head { display: flex; align-items: baseline; gap: 10px; }
-.we-stability-val { font-size: 30px; font-weight: 800; line-height: 1; letter-spacing: 1px; }
-.we-stability-tier { font-size: 14px; font-weight: 700; letter-spacing: 2px; }
-.we-stability-pressure { margin-left: auto; font-size: 11px; color: var(--we-text3); }
-.we-stability-bar {
-  height: 5px;
-  border-radius: 99px;
-  background: rgba(255,255,255,0.07);
-  overflow: hidden;
+/* ===== 世界核心（环形稳定度仪表） ===== */
+.we-core-section {
+  background: radial-gradient(120% 90% at 50% 0%, rgba(88,184,169,0.06), var(--we-card) 60%);
 }
-.we-stability-bar > div {
-  height: 100%;
-  border-radius: 99px;
-  transition: width 0.4s, background 0.4s;
-  box-shadow: 0 0 8px -1px currentColor;
+.we-core {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 0 2px;
 }
-.we-stability-detail {
+.we-core-ring {
+  position: relative;
+  width: 160px;
+  height: 160px;
+}
+.we-core-ring svg { display: block; }
+.we-core-ring svg circle[stroke^="url"] {
+  transition: stroke-dasharray 0.6s ease;
+}
+.we-core-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  pointer-events: none;
+}
+.we-core-title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  color: var(--we-gold);
+}
+.we-core-sub {
   font-size: 11px;
   color: var(--we-text3);
-  line-height: 1.6;
-  overflow-wrap: anywhere;
+  letter-spacing: 2px;
+  margin-top: 3px;
 }
+.we-core-pct {
+  font-size: 32px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: 1px;
+}
+.we-core-pct span { font-size: 15px; font-weight: 600; margin-left: 1px; }
+.we-core-tier {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  margin-top: 1px;
+  opacity: 0.85;
+}
+.we-core-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  width: 100%;
+  border-top: 1px solid var(--we-border);
+}
+.we-core-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 11px 0 3px;
+}
+.we-core-stat + .we-core-stat { border-left: 1px solid rgba(255,255,255,0.045); }
+.we-core-stat-k { font-size: 11px; color: var(--we-text3); letter-spacing: 1px; }
+.we-core-stat-v { font-size: 20px; font-weight: 700; color: var(--we-text); }
 
 /* ===== 摘要 ===== */
 .we-digest {

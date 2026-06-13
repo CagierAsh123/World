@@ -237,25 +237,58 @@ window.WORLD_ENGINE_UI = (function() {
 
   /** 渲染单个状态的概览区块 */
   function renderStatusBlock(s, layer) {
+    return renderWorldCore(s) + renderStatusBlockBody(s, layer);
+  }
+
+  /** 世界核心：环形稳定度仪表 + 四格关键计数 */
+  function renderWorldCore(s) {
     const stab = computeWorldStability(s);
-    const stabColor = STABILITY_TIER_COLOR[stab.tier] || '#58b8a9';
-    const stabDetail = Object.entries(stab.breakdown)
+    const tierColor = STABILITY_TIER_COLOR[stab.tier] || '#58b8a9';
+    const detail = Object.entries(stab.breakdown)
       .filter(([, v]) => v !== 0)
       .map(([k, v]) => `${k} ${v > 0 ? '+' : ''}${v}`).join('　') || '无压力来源';
-    const stabilityHtml = `
-      <div class="we-section">
-        <div class="we-section-title">🌐 世界稳定度</div>
-        <div class="we-stability">
-          <div class="we-stability-head">
-            <span class="we-stability-val" style="color:${stabColor};">${stab.stability}</span>
-            <span class="we-stability-tier" style="color:${stabColor};">${stab.tier}</span>
-            <span class="we-stability-pressure">压力 ${stab.pressure}</span>
+
+    const R = 66, C = 2 * Math.PI * R;
+    const pct = Math.max(0, Math.min(1, stab.stability / 100));
+    const dash = (pct * C).toFixed(1);
+    const theta = (pct * 360 - 90) * Math.PI / 180;       // 从正上方起、顺时针
+    const dotX = (80 + R * Math.cos(theta)).toFixed(1);
+    const dotY = (80 + R * Math.sin(theta)).toFixed(1);
+
+    const stats = [
+      ['事件', (s.events || []).length],
+      ['势力', (s.factions || []).length],
+      ['风声', (s.winds || []).length],
+      ['大势', (s.worldTrends || []).length],
+    ].map(([k, v]) => `<div class="we-core-stat"><div class="we-core-stat-k">${k}</div><div class="we-core-stat-v">${v}</div></div>`).join('');
+
+    return `
+      <div class="we-section we-core-section">
+        <div class="we-core" title="各来源压力（仅 Lv3/4 计入）：${detail}　|　压力 ${stab.pressure}">
+          <div class="we-core-ring">
+            <svg viewBox="0 0 160 160" width="160" height="160">
+              <defs>
+                <linearGradient id="weCoreGrad" x1="0" y1="1" x2="1" y2="0">
+                  <stop offset="0" stop-color="#58b8a9"/>
+                  <stop offset="1" stop-color="${tierColor}"/>
+                </linearGradient>
+              </defs>
+              <circle cx="80" cy="80" r="${R}" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="6"/>
+              <circle cx="80" cy="80" r="${R}" fill="none" stroke="url(#weCoreGrad)" stroke-width="6"
+                stroke-linecap="round" stroke-dasharray="${dash} ${(C - pct * C).toFixed(1)}"
+                transform="rotate(-90 80 80)"/>
+              <circle cx="${dotX}" cy="${dotY}" r="4.5" fill="${tierColor}"/>
+            </svg>
+            <div class="we-core-center">
+              <div class="we-core-title">世界核心</div>
+              <div class="we-core-sub">稳定度</div>
+              <div class="we-core-pct" style="color:${tierColor};">${stab.stability}<span>%</span></div>
+              <div class="we-core-tier" style="color:${tierColor};">${stab.tier}</div>
+            </div>
           </div>
-          <div class="we-stability-bar"><div style="width:${stab.stability}%;background:${stabColor};"></div></div>
-          <div class="we-stability-detail" title="各来源压力（仅 Lv3/4 计入）">${stabDetail}</div>
+          <div class="we-core-stats">${stats}</div>
         </div>
       </div>`;
-    return stabilityHtml + renderStatusBlockBody(s, layer);
   }
 
   function renderStatusBlockBody(s, layer) {
