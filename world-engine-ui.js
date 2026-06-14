@@ -150,6 +150,17 @@ window.WORLD_ENGINE_UI = (function() {
     return { state: state, scope: 'state', layer: state.chatLayer || getChatLayer() };
   }
 
+  // 按当前显示/编辑的存储桶读写：scope==='checkpoint' 读写存档点，其余读写主状态。
+  // 面板可能正在显示存档点（重 roll 回退）或设置页的存档点小节，此时所有编辑必须
+  // 写回存档点而非主状态，否则“数据变了、界面不动 / 点了没反应”（与风声同源的毛病）。
+  function loadScopedState(scope) {
+    return scope === 'checkpoint' ? core.restoreCheckpoint() : core.loadState();
+  }
+  function saveScopedState(scope, scopedState) {
+    if (scope === 'checkpoint') core.saveCheckpoint(scopedState);
+    else core.saveState(scopedState);
+  }
+
   function refresh(auto) {
     if (!panelElement || !panelVisible) return;
     // 设置页是静态表单，后台自动刷新会清掉正在输入的内容
@@ -339,19 +350,19 @@ window.WORLD_ENGINE_UI = (function() {
     let content = '';
     if (viewKey === 'situation') {
       content = renderSection('天下大势', 'trends', renderWorldTrends(s.worldTrends, scope))
-        + renderSection('区域事件', 'regional', renderRegionalIncident(s.regionalIncident))
+        + renderSection('区域事件', 'regional', renderRegionalIncident(s.regionalIncident, scope))
         + renderSection('事件账本', 'ledger', renderLedger(s.memories));
     } else if (viewKey === 'events') {
       content = renderSection('事件链', 'events', renderEventList(s.events, scope))
         + renderSection('风声', 'winds', renderWindList(s.winds, scope))
         + renderSection('影响链', 'influence', renderInfluenceChain(s.influenceChain, scope));
     } else if (viewKey === 'relations') {
-      content = renderSection('声誉', 'reputation', renderReputation(s.reputation))
-        + renderSection('势力', 'factions', renderFactionList(s.factions))
-        + renderSection('仇敌录', 'enemies', renderEnemies(s.enemies));
+      content = renderSection('声誉', 'reputation', renderReputation(s.reputation, scope))
+        + renderSection('势力', 'factions', renderFactionList(s.factions, scope))
+        + renderSection('仇敌录', 'enemies', renderEnemies(s.enemies, scope));
     } else if (viewKey === 'resources') {
-      content = renderSection('经济', 'economy', renderEconomy(s.economy))
-        + renderSection('秘密', 'blackbox', renderBlackbox(s.blackbox));
+      content = renderSection('经济', 'economy', renderEconomy(s.economy, scope))
+        + renderSection('秘密', 'blackbox', renderBlackbox(s.blackbox, scope));
     }
     return '<div class="we-sub-topbar">'
       + '<button class="we-icon-btn" id="we-btn-back" title="返回"><i class="fa-solid fa-arrow-left"></i></button>'
@@ -375,14 +386,14 @@ window.WORLD_ENGINE_UI = (function() {
   function renderCheckpointSections(s, layer) {
     return renderSection('天下大势', 'cp-trends', renderWorldTrends(s.worldTrends, 'checkpoint'))
       + renderSection('事件链', 'cp-events', renderEventList(s.events, 'checkpoint'))
-      + renderSection('势力', 'cp-factions', renderFactionList(s.factions))
+      + renderSection('势力', 'cp-factions', renderFactionList(s.factions, 'checkpoint'))
       + renderSection('风声', 'cp-winds', renderWindList(s.winds, 'checkpoint'))
-      + renderSection('声誉', 'cp-reputation', renderReputation(s.reputation))
-      + renderSection('经济', 'cp-economy', renderEconomy(s.economy))
-      + renderSection('仇敌录', 'cp-enemies', renderEnemies(s.enemies))
+      + renderSection('声誉', 'cp-reputation', renderReputation(s.reputation, 'checkpoint'))
+      + renderSection('经济', 'cp-economy', renderEconomy(s.economy, 'checkpoint'))
+      + renderSection('仇敌录', 'cp-enemies', renderEnemies(s.enemies, 'checkpoint'))
       + renderSection('影响链', 'cp-influence', renderInfluenceChain(s.influenceChain, 'checkpoint'))
-      + renderSection('区域事件', 'cp-regional', renderRegionalIncident(s.regionalIncident))
-      + renderSection('秘密', 'cp-blackbox', renderBlackbox(s.blackbox))
+      + renderSection('区域事件', 'cp-regional', renderRegionalIncident(s.regionalIncident, 'checkpoint'))
+      + renderSection('秘密', 'cp-blackbox', renderBlackbox(s.blackbox, 'checkpoint'))
       + renderSection('事件账本', 'cp-ledger', renderLedger(s.memories));
   }
 
@@ -660,7 +671,7 @@ window.WORLD_ENGINE_UI = (function() {
       </div>`;
   }
 
-  function renderFactionList(factions) {
+  function renderFactionList(factions, scope) {
     if (!factions || !factions.length) return '<div class="we-empty">暂无势力</div>';
     return renderPagedList(factions, 'factions', (f, factionIndex) => {
       const relationColors = {
@@ -671,7 +682,7 @@ window.WORLD_ENGINE_UI = (function() {
       const relColor = relationColors[f.relation] || '#888';
       const stColor = statusColors[f.status] || '#888';
 
-      const isEditing = editingFaction && editingFaction.index === factionIndex;
+      const isEditing = editingFaction && editingFaction.scope === scope && editingFaction.index === factionIndex;
 
       let pillarsHtml = '';
       if (f.powerPillars && f.powerPillars.length) {
@@ -680,11 +691,11 @@ window.WORLD_ENGINE_UI = (function() {
 
       const actionHtml = isEditing ? '' : `
         <div class="we-event-actions">
-          <button class="we-icon-btn we-faction-delete" data-faction-index="${factionIndex}" title="删除势力"><i class="fa-solid fa-trash-can"></i></button>
-          <button class="we-icon-btn we-faction-copy" data-faction-index="${factionIndex}" title="复制势力"><i class="fa-solid fa-copy"></i></button>
-          <button class="we-icon-btn we-faction-edit" data-faction-index="${factionIndex}" title="编辑势力"><i class="fa-solid fa-pen"></i></button>
+          <button class="we-icon-btn we-faction-delete" data-faction-scope="${scope}" data-faction-index="${factionIndex}" title="删除势力"><i class="fa-solid fa-trash-can"></i></button>
+          <button class="we-icon-btn we-faction-copy" data-faction-scope="${scope}" data-faction-index="${factionIndex}" title="复制势力"><i class="fa-solid fa-copy"></i></button>
+          <button class="we-icon-btn we-faction-edit" data-faction-scope="${scope}" data-faction-index="${factionIndex}" title="编辑势力"><i class="fa-solid fa-pen"></i></button>
         </div>`;
-      const editHtml = isEditing ? renderFactionEditor(f, factionIndex) : '';
+      const editHtml = isEditing ? renderFactionEditor(f, factionIndex, scope) : '';
 
       return `<div class="we-faction-item">
         <div class="we-faction-name">${u(f.name)}</div>
@@ -702,7 +713,7 @@ window.WORLD_ENGINE_UI = (function() {
     });
   }
 
-  function renderFactionEditor(f, index) {
+  function renderFactionEditor(f, index, scope) {
     const statusOptions = ['鼎盛','稳固','倾轧','困顿','衰落','瓦解'].map(s =>
       `<option value="${s}" ${f.status === s ? 'selected' : ''}>${s}</option>`).join('');
     const relationOptions = ['血盟','盟友','友好','中立','冷淡','敌对','世仇'].map(r =>
@@ -711,7 +722,7 @@ window.WORLD_ENGINE_UI = (function() {
     for (let i = 0; i < 3; i++) pillars.push(f.powerPillars?.[i] || '');
 
     return `
-      <div class="we-event-editor" data-faction-index="${index}">
+      <div class="we-event-editor" data-faction-scope="${scope}" data-faction-index="${index}">
         <button class="we-event-editor-close we-faction-editor-close"><i class="fa-solid fa-xmark"></i></button>
         <div class="we-event-editor-grid">
           <label class="we-event-editor-wide">势力名称<input class="we-faction-edit-name" type="text" value="${u(f.name||'')}"></label>
@@ -841,7 +852,7 @@ window.WORLD_ENGINE_UI = (function() {
       </div>`;
   }
 
-  function renderReputation(rep) {
+  function renderReputation(rep, scope) {
     if (!rep) return '<div class="we-empty">暂无声誉数据</div>';
     const levels = ['天怒人怨','声名狼藉','默默无闻','受人尊敬','万众敬仰'];
     const levelColors = { '天怒人怨':'#e05555', '声名狼藉':'#d97a5a', '默默无闻':'#7a8a9a', '受人尊敬':'#6cae8e', '万众敬仰':'#c9a45c' };
@@ -863,7 +874,7 @@ window.WORLD_ENGINE_UI = (function() {
       const dotsHtml = levels.map((l, i) => {
         const active = i <= idx ? ' we-rep-dot-active' : '';
         const dotColor = i <= idx ? color : '#444';
-        return `<span class="we-rep-dot${active}" style="background:${dotColor};" data-dim="${key}" data-level="${l}" title="${l}"></span>`;
+        return `<span class="we-rep-dot${active}" style="background:${dotColor};" data-rep-scope="${scope || 'state'}" data-dim="${key}" data-level="${l}" title="${l}"></span>`;
       }).join('');
       return `<div class="we-rep-row">
         <span class="we-rep-dim">${cn}</span>
@@ -873,8 +884,9 @@ window.WORLD_ENGINE_UI = (function() {
     }).join('') + '</div>';
   }
 
-  function renderEconomy(econ) {
+  function renderEconomy(econ, scope) {
     if (!econ) return '<div class="we-empty">暂无经济数据</div>';
+    const sc = scope || 'state';
     const climates = ['繁荣','平稳','衰退','动荡'];
     const climateColors = { '繁荣': '#3ecf8e', '平稳': '#7a8a9a', '衰退': '#d9a34a', '动荡': '#e05555' };
     const climateBg = { '繁荣': 'rgba(62,207,142,0.08)', '平稳': 'rgba(122,138,154,0.06)', '衰退': 'rgba(217,163,74,0.08)', '动荡': 'rgba(224,85,85,0.08)' };
@@ -883,13 +895,13 @@ window.WORLD_ENGINE_UI = (function() {
     html += '<span class="we-climate-label" style="color:' + (climateColors[climate]||'#7a8a9a') + '">' + climate + '</span>';
     html += '<div class="we-climate-btns">';
     for (const c of climates) {
-      html += '<span class="we-climate-btn' + (c === climate ? ' we-climate-btn-on' : '') + '" style="' + (c === climate ? ('color:'+(climateColors[c]||'#7a8a9a')+';border-color:'+(climateColors[c]||'#7a8a9a')) : '') + '" data-climate="' + c + '">' + c + '</span>';
+      html += '<span class="we-climate-btn' + (c === climate ? ' we-climate-btn-on' : '') + '" style="' + (c === climate ? ('color:'+(climateColors[c]||'#7a8a9a')+';border-color:'+(climateColors[c]||'#7a8a9a')) : '') + '" data-climate-scope="' + sc + '" data-climate="' + c + '">' + c + '</span>';
     }
     html += '</div></div>';
     if (econ.signals?.length) {
       html += renderPagedList(econ.signals, 'economy-signals', (s, i) =>
-        '<div class="we-signal-item">' +
-        '<span class="we-signal-del" data-sigidx="' + i + '">✕</span>' +
+        '<div class="we-signal-item" data-sig-scope="' + sc + '">' +
+        '<span class="we-signal-del" data-sig-scope="' + sc + '" data-sigidx="' + i + '">✕</span>' +
         '<span class="we-signal-summary">' + u(s.summary||s) + '</span>' +
         '<span class="we-signal-scope">' + u(s.scope||'?') + '</span>' +
         '</div>'
@@ -897,21 +909,21 @@ window.WORLD_ENGINE_UI = (function() {
     } else {
       html += '<div class="we-empty" style="margin-top:4px;">暂无市场信号</div>';
     }
-    html += '<div class="we-signal-item we-signal-add">添加信号</div>';
+    html += '<div class="we-signal-item we-signal-add" data-sig-scope="' + sc + '">添加信号</div>';
     return html;
   }
 
-  function renderEnemies(enemiesList) {
+  function renderEnemies(enemiesList, scope) {
     if (!enemiesList || !enemiesList.length) return '<div class="we-empty">暂无仇敌</div>';
     return renderPagedList(enemiesList, 'enemies', (en, enemyIndex) => {
-      const isEditing = editingEnemy?.index === enemyIndex;
+      const isEditing = editingEnemy?.scope === scope && editingEnemy?.index === enemyIndex;
       const actionHtml = isEditing ? '' : `
         <div class="we-event-actions">
-          <button class="we-icon-btn we-enemy-delete" data-enemy-index="${enemyIndex}" title="删除仇敌"><i class="fa-solid fa-trash-can"></i></button>
-          <button class="we-icon-btn we-enemy-copy" data-enemy-index="${enemyIndex}" title="复制仇敌"><i class="fa-solid fa-copy"></i></button>
-          <button class="we-icon-btn we-enemy-edit" data-enemy-index="${enemyIndex}" title="编辑仇敌"><i class="fa-solid fa-pen"></i></button>
+          <button class="we-icon-btn we-enemy-delete" data-enemy-scope="${scope}" data-enemy-index="${enemyIndex}" title="删除仇敌"><i class="fa-solid fa-trash-can"></i></button>
+          <button class="we-icon-btn we-enemy-copy" data-enemy-scope="${scope}" data-enemy-index="${enemyIndex}" title="复制仇敌"><i class="fa-solid fa-copy"></i></button>
+          <button class="we-icon-btn we-enemy-edit" data-enemy-scope="${scope}" data-enemy-index="${enemyIndex}" title="编辑仇敌"><i class="fa-solid fa-pen"></i></button>
         </div>`;
-      const editHtml = isEditing ? renderEnemyEditor(en, enemyIndex) : '';
+      const editHtml = isEditing ? renderEnemyEditor(en, enemyIndex, scope) : '';
       return `<div class="we-blood-item">
         ${actionHtml}
         <div class="we-blood-title">${u(en.name)} <span class="we-badge we-badge-danger">${en.status||'追踪中'}</span><span class="we-badge" style="background:var(--we-purple);font-size:10px;">${en.type==='blood'?'血仇':'恩怨'}</span></div>
@@ -921,13 +933,13 @@ window.WORLD_ENGINE_UI = (function() {
     });
   }
 
-  function renderEnemyEditor(en, index) {
+  function renderEnemyEditor(en, index, scope) {
     const typeOptions = [['blood','血仇'],['grudge','恩怨']].map(([v,label]) =>
       `<option value="${v}" ${en.type === v ? 'selected' : ''}>${label}</option>`).join('');
     const statusOptions = ['追踪中','策划中','执行中','已终结'].map(s =>
       `<option value="${s}" ${en.status === s ? 'selected' : ''}>${s}</option>`).join('');
     return `
-      <div class="we-event-editor" data-enemy-index="${index}">
+      <div class="we-event-editor" data-enemy-scope="${scope}" data-enemy-index="${index}">
         <button class="we-event-editor-close we-enemy-editor-close"><i class="fa-solid fa-xmark"></i></button>
         <div class="we-event-editor-grid">
           <label class="we-event-editor-wide">仇敌名称<input class="we-enemy-edit-name" type="text" value="${u(en.name||'')}"></label>
@@ -1005,16 +1017,16 @@ window.WORLD_ENGINE_UI = (function() {
     return labels[type] || '其他';
   }
 
-  function renderRegionalIncident(ri) {
+  function renderRegionalIncident(ri, scope) {
     if (!ri) return '<div class="we-empty">尚未进行区域事件判定</div>';
-    const isEditing = editingRI?.active === true;
+    const isEditing = editingRI?.active === true && editingRI?.scope === scope;
     const actionHtml = isEditing ? '' : `
       <div class="we-event-actions">
-        <button class="we-icon-btn we-ri-delete" title="清除区域事件"><i class="fa-solid fa-trash-can"></i></button>
-        <button class="we-icon-btn we-ri-copy" title="复制区域事件"><i class="fa-solid fa-copy"></i></button>
-        <button class="we-icon-btn we-ri-edit" title="编辑区域事件"><i class="fa-solid fa-pen"></i></button>
+        <button class="we-icon-btn we-ri-delete" data-ri-scope="${scope}" title="清除区域事件"><i class="fa-solid fa-trash-can"></i></button>
+        <button class="we-icon-btn we-ri-copy" data-ri-scope="${scope}" title="复制区域事件"><i class="fa-solid fa-copy"></i></button>
+        <button class="we-icon-btn we-ri-edit" data-ri-scope="${scope}" title="编辑区域事件"><i class="fa-solid fa-pen"></i></button>
       </div>`;
-    const editHtml = isEditing ? renderRIEditor(ri) : '';
+    const editHtml = isEditing ? renderRIEditor(ri, scope) : '';
 
     if (ri.active) {
       return `<div class="we-accident-item we-regional-incident-item we-accident-triggered">
@@ -1038,13 +1050,13 @@ window.WORLD_ENGINE_UI = (function() {
     return `<div class="we-accident-item we-regional-incident-item">${actionHtml}本轮无区域事件${editHtml}</div>`;
   }
 
-  function renderRIEditor(ri) {
+  function renderRIEditor(ri, scope) {
     const types = ['banditry','fire','massacre','flood','infrastructure','plague','famine','riot','rebellion','military','earthquake','storm'];
     if (ri.type && !types.includes(ri.type)) types.push(ri.type);
     const typeOptions = types.map(t =>
       `<option value="${t}" ${ri.type === t ? 'selected' : ''}>${u(getRegionalIncidentTypeLabel(t))}</option>`).join('');
     return `
-      <div class="we-event-editor" data-ri-edit="1">
+      <div class="we-event-editor" data-ri-edit="1" data-ri-scope="${scope}">
         <button class="we-event-editor-close we-ri-editor-close"><i class="fa-solid fa-xmark"></i></button>
         <div class="we-event-editor-grid">
           <label>状态<select class="we-ri-edit-active">
@@ -1064,20 +1076,20 @@ window.WORLD_ENGINE_UI = (function() {
       </div>`;
   }
 
-  function renderBlackbox(blackbox) {
+  function renderBlackbox(blackbox, scope) {
     if (!blackbox) return '<div class="we-empty">暂无黑盒信息</div>';
     let html = '';
     if (blackbox.secretActions?.length) {
       html += '<div class="we-accident-item" style="border-left-color:var(--we-purple);"><strong>隐秘行为:</strong></div>';
       html += renderPagedList(blackbox.secretActions, 'secret-actions', (a, actIndex) => {
-        const isEditing = editingBBAction?.index === actIndex;
+        const isEditing = editingBBAction?.scope === scope && editingBBAction?.index === actIndex;
         const actionHtml = isEditing ? '' : `
           <div class="we-event-actions">
-            <button class="we-icon-btn we-bba-delete" data-bba-index="${actIndex}" title="删除隐秘行为"><i class="fa-solid fa-trash-can"></i></button>
-            <button class="we-icon-btn we-bba-copy" data-bba-index="${actIndex}" title="复制隐秘行为"><i class="fa-solid fa-copy"></i></button>
-            <button class="we-icon-btn we-bba-edit" data-bba-index="${actIndex}" title="编辑隐秘行为"><i class="fa-solid fa-pen"></i></button>
+            <button class="we-icon-btn we-bba-delete" data-bba-scope="${scope}" data-bba-index="${actIndex}" title="删除隐秘行为"><i class="fa-solid fa-trash-can"></i></button>
+            <button class="we-icon-btn we-bba-copy" data-bba-scope="${scope}" data-bba-index="${actIndex}" title="复制隐秘行为"><i class="fa-solid fa-copy"></i></button>
+            <button class="we-icon-btn we-bba-edit" data-bba-scope="${scope}" data-bba-index="${actIndex}" title="编辑隐秘行为"><i class="fa-solid fa-pen"></i></button>
           </div>`;
-        const editHtml = isEditing ? renderBBActionEditor(a, actIndex) : '';
+        const editHtml = isEditing ? renderBBActionEditor(a, actIndex, scope) : '';
         return `<div class="we-accident-item we-blackbox-item" style="margin:2px 0;font-size:12px;position:relative;">
           ${actionHtml}
           ${u(a.action||a)} — 知情者: ${u(a.witnesses||'无')}
@@ -1090,14 +1102,14 @@ window.WORLD_ENGINE_UI = (function() {
       html += renderPagedList(blackbox.secretAssets, 'secret-assets', (a, astIndex) => {
         const statusColor = { '有效': 'var(--we-green)', '过期': 'var(--we-text3)', '暴露': 'var(--we-red)', '失效': 'var(--we-text3)' };
         const sc = statusColor[a.status] || 'var(--we-text3)';
-        const isEditing = editingBBAsset?.index === astIndex;
+        const isEditing = editingBBAsset?.scope === scope && editingBBAsset?.index === astIndex;
         const actionHtml = isEditing ? '' : `
           <div class="we-event-actions">
-            <button class="we-icon-btn we-bbs-delete" data-bbs-index="${astIndex}" title="删除隐秘资产"><i class="fa-solid fa-trash-can"></i></button>
-            <button class="we-icon-btn we-bbs-copy" data-bbs-index="${astIndex}" title="复制隐秘资产"><i class="fa-solid fa-copy"></i></button>
-            <button class="we-icon-btn we-bbs-edit" data-bbs-index="${astIndex}" title="编辑隐秘资产"><i class="fa-solid fa-pen"></i></button>
+            <button class="we-icon-btn we-bbs-delete" data-bbs-scope="${scope}" data-bbs-index="${astIndex}" title="删除隐秘资产"><i class="fa-solid fa-trash-can"></i></button>
+            <button class="we-icon-btn we-bbs-copy" data-bbs-scope="${scope}" data-bbs-index="${astIndex}" title="复制隐秘资产"><i class="fa-solid fa-copy"></i></button>
+            <button class="we-icon-btn we-bbs-edit" data-bbs-scope="${scope}" data-bbs-index="${astIndex}" title="编辑隐秘资产"><i class="fa-solid fa-pen"></i></button>
           </div>`;
-        const editHtml = isEditing ? renderBBAssetEditor(a, astIndex) : '';
+        const editHtml = isEditing ? renderBBAssetEditor(a, astIndex, scope) : '';
         return `<div class="we-accident-item we-blackbox-item" style="margin:2px 0;font-size:12px;position:relative;">
           ${actionHtml}
           ${u(a.name||a)} — 暴露度: ${a.exposure||0}%, <span style="color:${sc}">${u(a.status||'有效')}</span>
@@ -1109,35 +1121,41 @@ window.WORLD_ENGINE_UI = (function() {
     return html;
   }
 
-  function renderBBActionEditor(a, index) {
+  function renderBBActionEditor(a, index, scope) {
     return `
-      <div class="we-event-editor" data-bba-index="${index}">
+      <div class="we-event-editor" data-bba-scope="${scope}" data-bba-index="${index}">
         <button class="we-event-editor-close we-bba-editor-close"><i class="fa-solid fa-xmark"></i></button>
         <div class="we-event-editor-grid">
+          <label>类型<select class="we-bb-type-select" data-bb-kind="action" data-bb-scope="${scope}" data-bb-index="${index}" title="切换类型即转换为隐秘资产">
+            <option value="action" selected>隐秘行为</option>
+            <option value="asset">隐秘资产</option>
+          </select></label>
           <label class="we-event-editor-wide">行为描述<textarea class="we-bba-edit-action" rows="2">${u(a.action||'')}</textarea></label>
           <label class="we-event-editor-wide">目击者<input class="we-bba-edit-witnesses" type="text" value="${u(a.witnesses||'无')}"></label>
         </div>
         <div class="we-event-editor-footer">
           <button class="we-btn we-btn-primary we-bba-editor-save"><i class="fa-solid fa-floppy-disk"></i> 保存</button>
-          <button class="we-btn we-bba-editor-switch" data-bba-index="${index}" title="将此隐秘行为转为隐秘资产"><i class="fa-solid fa-right-left"></i> 转为隐秘资产</button>
         </div>
       </div>`;
   }
 
-  function renderBBAssetEditor(a, index) {
+  function renderBBAssetEditor(a, index, scope) {
     const statusOptions = ['有效','过期','暴露','失效'].map(s =>
       `<option value="${s}" ${a.status === s ? 'selected' : ''}>${s}</option>`).join('');
     return `
-      <div class="we-event-editor" data-bbs-index="${index}">
+      <div class="we-event-editor" data-bbs-scope="${scope}" data-bbs-index="${index}">
         <button class="we-event-editor-close we-bbs-editor-close"><i class="fa-solid fa-xmark"></i></button>
         <div class="we-event-editor-grid">
+          <label>类型<select class="we-bb-type-select" data-bb-kind="asset" data-bb-scope="${scope}" data-bb-index="${index}" title="切换类型即转换为隐秘行为">
+            <option value="action">隐秘行为</option>
+            <option value="asset" selected>隐秘资产</option>
+          </select></label>
           <label class="we-event-editor-wide">资产名称<input class="we-bbs-edit-name" type="text" value="${u(a.name||'')}"></label>
           <label>暴露度<input class="we-bbs-edit-exposure" type="number" min="0" max="100" value="${a.exposure||0}"></label>
           <label>状态<select class="we-bbs-edit-status">${statusOptions}</select></label>
         </div>
         <div class="we-event-editor-footer">
           <button class="we-btn we-btn-primary we-bbs-editor-save"><i class="fa-solid fa-floppy-disk"></i> 保存</button>
-          <button class="we-btn we-bbs-editor-switch" data-bbs-index="${index}" title="将此隐秘资产转为隐秘行为"><i class="fa-solid fa-right-left"></i> 转为隐秘行为</button>
         </div>
       </div>`;
   }
@@ -1283,15 +1301,6 @@ window.WORLD_ENGINE_UI = (function() {
   }
 
   function bindEvents(state) {
-    function loadScopedState(scope) {
-      return scope === 'checkpoint' ? core.restoreCheckpoint() : core.loadState();
-    }
-
-    function saveScopedState(scope, scopedState) {
-      if (scope === 'checkpoint') core.saveCheckpoint(scopedState);
-      else core.saveState(scopedState);
-    }
-
     document.querySelectorAll('.we-event-delete').forEach(button => {
       button.onclick = () => {
         const scope = button.dataset.eventScope;
@@ -1396,7 +1405,7 @@ window.WORLD_ENGINE_UI = (function() {
     // 势力编辑器事件
     document.querySelectorAll('.we-faction-edit').forEach(button => {
       button.onclick = () => {
-        editingFaction = { index: Number(button.dataset.factionIndex) };
+        editingFaction = { scope: button.dataset.factionScope, index: Number(button.dataset.factionIndex) };
         refresh();
       };
     });
@@ -1406,8 +1415,9 @@ window.WORLD_ENGINE_UI = (function() {
     document.querySelectorAll('.we-faction-editor-save').forEach(button => {
       button.onclick = () => {
         const editor = button.closest('.we-event-editor');
+        const scope = editor.dataset.factionScope;
         const index = Number(editor.dataset.factionIndex);
-        const state = core.loadState();
+        const state = loadScopedState(scope);
         const faction = state.factions?.[index];
         if (!faction) return;
         const name = editor.querySelector('.we-faction-edit-name').value.trim();
@@ -1424,7 +1434,7 @@ window.WORLD_ENGINE_UI = (function() {
           if (v) pillars.push(v);
         });
         faction.powerPillars = pillars;
-        core.saveState(state);
+        saveScopedState(scope, state);
         editingFaction = null;
         showToast('势力修改已保存');
         refresh();
@@ -1432,25 +1442,27 @@ window.WORLD_ENGINE_UI = (function() {
     });
     document.querySelectorAll('.we-faction-delete').forEach(button => {
       button.onclick = () => {
+        const scope = button.dataset.factionScope;
         const index = Number(button.dataset.factionIndex);
-        const state = core.loadState();
+        const state = loadScopedState(scope);
         const faction = state.factions?.[index];
         if (!faction || !confirm(`删除势力"${faction.name}"？`)) return;
         state.factions.splice(index, 1);
-        core.saveState(state);
+        saveScopedState(scope, state);
         showToast('势力已删除');
         refresh();
       };
     });
     document.querySelectorAll('.we-faction-copy').forEach(button => {
       button.onclick = () => {
+        const scope = button.dataset.factionScope;
         const index = Number(button.dataset.factionIndex);
-        const state = core.loadState();
+        const state = loadScopedState(scope);
         const faction = state.factions?.[index];
         if (!faction) return;
         const copy = JSON.parse(JSON.stringify(faction));
-        state.factions.push(copy);
-        core.saveState(state);
+        state.factions.splice(index + 1, 0, copy);
+        saveScopedState(scope, state);
         showToast('势力已复制');
         refresh();
       };
@@ -1580,7 +1592,7 @@ window.WORLD_ENGINE_UI = (function() {
     // ===== 仇敌编辑器事件 =====
     document.querySelectorAll('.we-enemy-edit').forEach(button => {
       button.onclick = () => {
-        editingEnemy = { index: Number(button.dataset.enemyIndex) };
+        editingEnemy = { scope: button.dataset.enemyScope, index: Number(button.dataset.enemyIndex) };
         refresh();
       };
     });
@@ -1590,8 +1602,9 @@ window.WORLD_ENGINE_UI = (function() {
     document.querySelectorAll('.we-enemy-editor-save').forEach(button => {
       button.onclick = () => {
         const editor = button.closest('.we-event-editor');
+        const scope = editor.dataset.enemyScope;
         const index = Number(editor.dataset.enemyIndex);
-        const state = core.loadState();
+        const state = loadScopedState(scope);
         const enemy = state.enemies?.[index];
         if (!enemy) return;
         const name = editor.querySelector('.we-enemy-edit-name').value.trim();
@@ -1600,7 +1613,7 @@ window.WORLD_ENGINE_UI = (function() {
         enemy.type = editor.querySelector('.we-enemy-edit-type').value;
         enemy.status = editor.querySelector('.we-enemy-edit-status').value;
         enemy.reason = editor.querySelector('.we-enemy-edit-reason').value.trim();
-        core.saveState(state);
+        saveScopedState(scope, state);
         editingEnemy = null;
         showToast('仇敌修改已保存');
         refresh();
@@ -1608,25 +1621,27 @@ window.WORLD_ENGINE_UI = (function() {
     });
     document.querySelectorAll('.we-enemy-delete').forEach(button => {
       button.onclick = () => {
+        const scope = button.dataset.enemyScope;
         const index = Number(button.dataset.enemyIndex);
-        const state = core.loadState();
+        const state = loadScopedState(scope);
         const enemy = state.enemies?.[index];
         if (!enemy || !confirm(`删除仇敌"${enemy.name}"？`)) return;
         state.enemies.splice(index, 1);
-        core.saveState(state);
+        saveScopedState(scope, state);
         showToast('仇敌已删除');
         refresh();
       };
     });
     document.querySelectorAll('.we-enemy-copy').forEach(button => {
       button.onclick = () => {
+        const scope = button.dataset.enemyScope;
         const index = Number(button.dataset.enemyIndex);
-        const state = core.loadState();
+        const state = loadScopedState(scope);
         const enemy = state.enemies?.[index];
         if (!enemy) return;
         const copy = JSON.parse(JSON.stringify(enemy));
-        state.enemies.push(copy);
-        core.saveState(state);
+        state.enemies.splice(index + 1, 0, copy);
+        saveScopedState(scope, state);
         showToast('仇敌已复制');
         refresh();
       };
@@ -1693,7 +1708,7 @@ window.WORLD_ENGINE_UI = (function() {
     // ===== 区域事件编辑器事件 =====
     document.querySelectorAll('.we-ri-edit').forEach(button => {
       button.onclick = () => {
-        editingRI = { active: true };
+        editingRI = { active: true, scope: button.dataset.riScope };
         refresh();
       };
     });
@@ -1703,7 +1718,8 @@ window.WORLD_ENGINE_UI = (function() {
     document.querySelectorAll('.we-ri-editor-save').forEach(button => {
       button.onclick = () => {
         const editor = button.closest('.we-event-editor');
-        const state = core.loadState();
+        const scope = editor.dataset.riScope;
+        const state = loadScopedState(scope);
         if (!state.regionalIncident) {
           state.regionalIncident = { active: false, title: '', type: '', scope: '', impact: '', duration: 0, cooldown: 0, _retry: false, _retryType: '' };
         }
@@ -1715,7 +1731,7 @@ window.WORLD_ENGINE_UI = (function() {
         ri.duration = Math.max(0, Number(editor.querySelector('.we-ri-edit-duration').value) || 0);
         ri.cooldown = Math.max(0, Number(editor.querySelector('.we-ri-edit-cooldown').value) || 0);
         ri.impact = editor.querySelector('.we-ri-edit-impact').value.trim();
-        core.saveState(state);
+        saveScopedState(scope, state);
         editingRI = null;
         showToast('区域事件修改已保存');
         refresh();
@@ -1723,25 +1739,27 @@ window.WORLD_ENGINE_UI = (function() {
     });
     document.querySelectorAll('.we-ri-delete').forEach(button => {
       button.onclick = () => {
-        const state = core.loadState();
+        const scope = button.dataset.riScope;
+        const state = loadScopedState(scope);
         if (!state.regionalIncident) return;
         if (!confirm('清除区域事件？')) return;
         state.regionalIncident = { active: false, title: '', type: '', scope: '', impact: '', cooldown: state.regionalIncident.cooldown || 0, _retry: false, _retryType: '' };
-        core.saveState(state);
+        saveScopedState(scope, state);
         showToast('区域事件已清除');
         refresh();
       };
     });
     document.querySelectorAll('.we-ri-copy').forEach(button => {
       button.onclick = () => {
-        const state = core.loadState();
+        const scope = button.dataset.riScope;
+        const state = loadScopedState(scope);
         if (!state.regionalIncident) return;
         const copy = JSON.parse(JSON.stringify(state.regionalIncident));
         copy._retry = false;
         copy._retryType = '';
         copy.cooldown = 0;
         state.regionalIncident = copy;
-        core.saveState(state);
+        saveScopedState(scope, state);
         showToast('区域事件已复制（冷却已重置）');
         refresh();
       };
@@ -1750,7 +1768,7 @@ window.WORLD_ENGINE_UI = (function() {
     // ===== 黑盒隐秘行为编辑器事件 =====
     document.querySelectorAll('.we-bba-edit').forEach(button => {
       button.onclick = () => {
-        editingBBAction = { index: Number(button.dataset.bbaIndex) };
+        editingBBAction = { scope: button.dataset.bbaScope, index: Number(button.dataset.bbaIndex) };
         refresh();
       };
     });
@@ -1760,15 +1778,16 @@ window.WORLD_ENGINE_UI = (function() {
     document.querySelectorAll('.we-bba-editor-save').forEach(button => {
       button.onclick = () => {
         const editor = button.closest('.we-event-editor');
+        const scope = editor.dataset.bbaScope;
         const index = Number(editor.dataset.bbaIndex);
-        const state = core.loadState();
+        const state = loadScopedState(scope);
         const a = state.blackbox?.secretActions?.[index];
         if (!a) return;
         const action = editor.querySelector('.we-bba-edit-action').value.trim();
         if (!action) { showToast('行为描述不能为空', true); return; }
-        a.action = action;
-        a.witnesses = editor.querySelector('.we-bba-edit-witnesses').value.trim() || '无';
-        core.saveState(state);
+        if (typeof a === 'string') { state.blackbox.secretActions[index] = { action, witnesses: '无' }; }
+        else { a.action = action; a.witnesses = editor.querySelector('.we-bba-edit-witnesses').value.trim() || '无'; }
+        saveScopedState(scope, state);
         editingBBAction = null;
         showToast('隐秘行为修改已保存');
         refresh();
@@ -1776,45 +1795,29 @@ window.WORLD_ENGINE_UI = (function() {
     });
     document.querySelectorAll('.we-bba-delete').forEach(button => {
       button.onclick = () => {
+        const scope = button.dataset.bbaScope;
         const index = Number(button.dataset.bbaIndex);
-        const state = core.loadState();
+        const state = loadScopedState(scope);
         const a = state.blackbox?.secretActions?.[index];
         if (!a || !confirm(`删除隐秘行为？`)) return;
         state.blackbox.secretActions.splice(index, 1);
-        core.saveState(state);
+        saveScopedState(scope, state);
         showToast('隐秘行为已删除');
         refresh();
       };
     });
     document.querySelectorAll('.we-bba-copy').forEach(button => {
       button.onclick = () => {
+        const scope = button.dataset.bbaScope;
         const index = Number(button.dataset.bbaIndex);
-        const state = core.loadState();
+        const state = loadScopedState(scope);
         const a = state.blackbox?.secretActions?.[index];
         if (!a) return;
         const copy = JSON.parse(JSON.stringify(a));
         // 插在原条目之后，避免追加到末页后因翻页器复位而“看不见”
         state.blackbox.secretActions.splice(index + 1, 0, copy);
-        core.saveState(state);
+        saveScopedState(scope, state);
         showToast('隐秘行为已复制');
-        refresh();
-      };
-    });
-    // 隐秘行为 → 隐秘资产（编辑器内切换）
-    document.querySelectorAll('.we-bba-editor-switch').forEach(button => {
-      button.onclick = () => {
-        const index = Number(button.dataset.bbaIndex);
-        const state = core.loadState();
-        const a = state.blackbox?.secretActions?.[index];
-        if (a === undefined || a === null) return;
-        const src = (typeof a === 'string') ? { action: a } : a;
-        const asset = { name: src.action || '未命名', exposure: 0, status: '有效' };
-        state.blackbox.secretActions.splice(index, 1);
-        if (!Array.isArray(state.blackbox.secretAssets)) state.blackbox.secretAssets = [];
-        state.blackbox.secretAssets.push(asset);
-        core.saveState(state);
-        editingBBAction = null;
-        showToast('已转为隐秘资产');
         refresh();
       };
     });
@@ -1822,7 +1825,7 @@ window.WORLD_ENGINE_UI = (function() {
     // ===== 黑盒隐秘资产编辑器事件 =====
     document.querySelectorAll('.we-bbs-edit').forEach(button => {
       button.onclick = () => {
-        editingBBAsset = { index: Number(button.dataset.bbsIndex) };
+        editingBBAsset = { scope: button.dataset.bbsScope, index: Number(button.dataset.bbsIndex) };
         refresh();
       };
     });
@@ -1832,16 +1835,18 @@ window.WORLD_ENGINE_UI = (function() {
     document.querySelectorAll('.we-bbs-editor-save').forEach(button => {
       button.onclick = () => {
         const editor = button.closest('.we-event-editor');
+        const scope = editor.dataset.bbsScope;
         const index = Number(editor.dataset.bbsIndex);
-        const state = core.loadState();
+        const state = loadScopedState(scope);
         const a = state.blackbox?.secretAssets?.[index];
         if (!a) return;
         const name = editor.querySelector('.we-bbs-edit-name').value.trim();
         if (!name) { showToast('资产名称不能为空', true); return; }
-        a.name = name;
-        a.exposure = Math.min(100, Math.max(0, Number(editor.querySelector('.we-bbs-edit-exposure').value) || 0));
-        a.status = editor.querySelector('.we-bbs-edit-status').value;
-        core.saveState(state);
+        const exposure = Math.min(100, Math.max(0, Number(editor.querySelector('.we-bbs-edit-exposure').value) || 0));
+        const status = editor.querySelector('.we-bbs-edit-status').value;
+        if (typeof a === 'string') { state.blackbox.secretAssets[index] = { name, exposure, status }; }
+        else { a.name = name; a.exposure = exposure; a.status = status; }
+        saveScopedState(scope, state);
         editingBBAsset = null;
         showToast('隐秘资产修改已保存');
         refresh();
@@ -1849,44 +1854,61 @@ window.WORLD_ENGINE_UI = (function() {
     });
     document.querySelectorAll('.we-bbs-delete').forEach(button => {
       button.onclick = () => {
+        const scope = button.dataset.bbsScope;
         const index = Number(button.dataset.bbsIndex);
-        const state = core.loadState();
+        const state = loadScopedState(scope);
         const a = state.blackbox?.secretAssets?.[index];
         if (!a || !confirm(`删除隐秘资产"${a.name}"？`)) return;
         state.blackbox.secretAssets.splice(index, 1);
-        core.saveState(state);
+        saveScopedState(scope, state);
         showToast('隐秘资产已删除');
         refresh();
       };
     });
     document.querySelectorAll('.we-bbs-copy').forEach(button => {
       button.onclick = () => {
+        const scope = button.dataset.bbsScope;
         const index = Number(button.dataset.bbsIndex);
-        const state = core.loadState();
+        const state = loadScopedState(scope);
         const a = state.blackbox?.secretAssets?.[index];
         if (!a) return;
         const copy = JSON.parse(JSON.stringify(a));
         state.blackbox.secretAssets.splice(index + 1, 0, copy);
-        core.saveState(state);
+        saveScopedState(scope, state);
         showToast('隐秘资产已复制');
         refresh();
       };
     });
-    // 隐秘资产 → 隐秘行为（编辑器内切换）
-    document.querySelectorAll('.we-bbs-editor-switch').forEach(button => {
-      button.onclick = () => {
-        const index = Number(button.dataset.bbsIndex);
-        const state = core.loadState();
-        const a = state.blackbox?.secretAssets?.[index];
-        if (a === undefined || a === null) return;
-        const src = (typeof a === 'string') ? { name: a } : a;
-        const action = { action: src.name || '未命名', witnesses: '无' };
-        state.blackbox.secretAssets.splice(index, 1);
-        if (!Array.isArray(state.blackbox.secretActions)) state.blackbox.secretActions = [];
-        state.blackbox.secretActions.push(action);
-        core.saveState(state);
-        editingBBAsset = null;
-        showToast('已转为隐秘行为');
+    // 隐秘行为 ⇄ 隐秘资产：编辑器内顶部「类型」下拉切换即互转
+    document.querySelectorAll('.we-bb-type-select').forEach(select => {
+      select.onchange = () => {
+        const kind = select.dataset.bbKind;       // 当前条目类型：action / asset
+        const target = select.value;              // 目标类型
+        if (kind === target) return;
+        const scope = select.dataset.bbScope;
+        const index = Number(select.dataset.bbIndex);
+        const state = loadScopedState(scope);
+        state.blackbox = state.blackbox || {};
+        if (kind === 'action') {
+          const a = state.blackbox.secretActions?.[index];
+          if (a === undefined || a === null) return;
+          const src = (typeof a === 'string') ? { action: a } : a;
+          state.blackbox.secretActions.splice(index, 1);
+          if (!Array.isArray(state.blackbox.secretAssets)) state.blackbox.secretAssets = [];
+          state.blackbox.secretAssets.push({ name: src.action || '未命名', exposure: 0, status: '有效' });
+          editingBBAction = null;
+          showToast('已转为隐秘资产');
+        } else {
+          const a = state.blackbox.secretAssets?.[index];
+          if (a === undefined || a === null) return;
+          const src = (typeof a === 'string') ? { name: a } : a;
+          state.blackbox.secretAssets.splice(index, 1);
+          if (!Array.isArray(state.blackbox.secretActions)) state.blackbox.secretActions = [];
+          state.blackbox.secretActions.push({ action: src.name || '未命名', witnesses: '无' });
+          editingBBAsset = null;
+          showToast('已转为隐秘行为');
+        }
+        saveScopedState(scope, state);
         refresh();
       };
     });
@@ -2448,9 +2470,11 @@ window.WORLD_ENGINE_UI = (function() {
       var dim = dot.getAttribute('data-dim');
       var level = dot.getAttribute('data-level');
       if (dim && level) {
-        var s = window.WORLD_ENGINE_CORE.loadState();
+        var scope = dot.getAttribute('data-rep-scope');
+        var s = loadScopedState(scope);
+        s.reputation = s.reputation || {};
         s.reputation[dim] = level;
-        window.WORLD_ENGINE_CORE.saveState(s);
+        saveScopedState(scope, s);
         refresh();
       }
       return;
@@ -2460,9 +2484,11 @@ window.WORLD_ENGINE_UI = (function() {
     if (cb) {
       var c = cb.getAttribute('data-climate');
       if (c) {
-        var s = window.WORLD_ENGINE_CORE.loadState();
+        var scope = cb.getAttribute('data-climate-scope');
+        var s = loadScopedState(scope);
+        s.economy = s.economy || {};
         s.economy.climate = c;
-        window.WORLD_ENGINE_CORE.saveState(s);
+        saveScopedState(scope, s);
         refresh();
       }
       return;
@@ -2497,22 +2523,26 @@ window.WORLD_ENGINE_UI = (function() {
     if (sd) {
       var idx = parseInt(sd.getAttribute('data-sigidx'));
       if (!isNaN(idx)) {
-        var s = window.WORLD_ENGINE_CORE.loadState();
-        if (s.economy.signals && s.economy.signals[idx] !== undefined) {
+        var scope = sd.getAttribute('data-sig-scope');
+        var s = loadScopedState(scope);
+        if (s.economy && s.economy.signals && s.economy.signals[idx] !== undefined) {
           s.economy.signals.splice(idx, 1);
-          window.WORLD_ENGINE_CORE.saveState(s);
+          saveScopedState(scope, s);
           refresh();
         }
       }
       return;
     }
     // 添加 signal
-    if (e.target.closest('.we-signal-add')) {
-      var s = window.WORLD_ENGINE_CORE.loadState();
+    var sa = e.target.closest('.we-signal-add');
+    if (sa) {
+      var scope = sa.getAttribute('data-sig-scope');
+      var s = loadScopedState(scope);
+      s.economy = s.economy || {};
       if (!s.economy.signals) s.economy.signals = [];
       if (s.economy.signals.length < 5) {
         s.economy.signals.push({ summary: '新信号', scope: '区域' });
-        window.WORLD_ENGINE_CORE.saveState(s);
+        saveScopedState(scope, s);
         refresh();
       }
       return;
@@ -2532,6 +2562,7 @@ window.WORLD_ENGINE_UI = (function() {
     var del = parent.querySelector('.we-signal-del');
     var idx = del ? parseInt(del.getAttribute('data-sigidx')) : -1;
     if (isNaN(idx)) return;
+    var dispScope = parent.getAttribute('data-sig-scope');
     var oldText = item.textContent;
     item.contentEditable = 'true';
     item.focus();
@@ -2543,11 +2574,11 @@ window.WORLD_ENGINE_UI = (function() {
     sel.addRange(range);
     item.onblur = function() {
       item.contentEditable = 'false';
-      var s = window.WORLD_ENGINE_CORE.loadState();
-      if (s.economy.signals && s.economy.signals[idx]) {
+      var s = loadScopedState(dispScope);
+      if (s.economy && s.economy.signals && s.economy.signals[idx]) {
         if (isScope) s.economy.signals[idx].scope = item.textContent;
         else s.economy.signals[idx].summary = item.textContent;
-        window.WORLD_ENGINE_CORE.saveState(s);
+        saveScopedState(dispScope, s);
       }
     };
     item.onkeydown = function(ke) {
