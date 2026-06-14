@@ -4,6 +4,7 @@ window.WORLD_ENGINE_UI = (function() {
   const evolution = window.WORLD_ENGINE_EVOLUTION;
 
   let panelElement = null;
+  let panelBodyElement = null;
   let panelVisible = false;
   let isEvolving = false;
   let editingEvent = null;
@@ -103,6 +104,7 @@ window.WORLD_ENGINE_UI = (function() {
     `;
     document.body.appendChild(panel);
     panelElement = panel;
+    panelBodyElement = panel.querySelector('#we-panel-body');
 
     panel.querySelector('.we-panel-close').onclick = () => hidePanel();
     initDrag(panel, panel.querySelector('.we-panel-header'));
@@ -152,7 +154,7 @@ window.WORLD_ENGINE_UI = (function() {
     if (!panelElement || !panelVisible) return;
     // 设置页是静态表单，后台自动刷新会清掉正在输入的内容
     if (auto && _currentView === 'settings') return;
-    const body = document.getElementById('we-panel-body');
+    const body = panelBodyElement;
     if (!body) return;
     listPagerCounter = 0;
 
@@ -1912,7 +1914,7 @@ window.WORLD_ENGINE_UI = (function() {
     });
 
     // 点击导航列表以外的地方取消选中
-    const panelBody = document.getElementById('we-panel-body');
+    const panelBody = panelBodyElement;
     if (panelBody) {
       panelBody.onclick = (e) => {
         if (_currentView === 'home' && _selectedNavView && !e.target.closest('.we-nav-row')) {
