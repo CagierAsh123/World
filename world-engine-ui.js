@@ -186,7 +186,7 @@ window.WORLD_ENGINE_UI = (function() {
       body.innerHTML = renderSubView(_currentView, s, active.layer, active.scope);
     }
 
-    updatePanelHeader(s);
+    updatePanelHeader(s, active.layer);
     bindEvents(state);
   }
 
@@ -287,9 +287,12 @@ window.WORLD_ENGINE_UI = (function() {
   };
 
   /** 刷新头部的「第X轮 + 稳定度小字」 */
-  function updatePanelHeader(state) {
+  function updatePanelHeader(state, layer) {
     const roundEl = document.getElementById('we-header-round');
-    if (roundEl) roundEl.textContent = '第 ' + ((state && state.round) || 0) + ' 轮';
+    if (roundEl) {
+      const layerText = (layer !== undefined && layer !== null && layer !== '-') ? ' · 第 ' + layer + ' 层' : '';
+      roundEl.textContent = '第 ' + ((state && state.round) || 0) + ' 轮' + layerText;
+    }
     const moodEl = document.getElementById('we-header-mood');
     if (moodEl) {
       const stab = computeWorldStability(state || {});
@@ -370,6 +373,14 @@ window.WORLD_ENGINE_UI = (function() {
       + '</div>' + content;
   }
 
+  /** 存档点小标题：青色默认小字 + 「- N轮 - M层」 */
+  function checkpointTitle(checkpoint, cpLayer) {
+    if (!checkpoint) return '<span style="color:var(--we-accent);font-size:12px;font-weight:400;">存档点</span>';
+    const round = checkpoint.round || 0;
+    const layer = (cpLayer === undefined || cpLayer === null) ? '-' : cpLayer;
+    return '<span style="color:var(--we-accent);font-size:12px;font-weight:400;">存档点 - ' + round + ' 轮 - ' + layer + ' 层</span>';
+  }
+
   function renderSettingsView(checkpoint, cpLayer) {
     const cpContent = checkpoint
       ? renderCheckpointSections(checkpoint, cpLayer)
@@ -379,7 +390,7 @@ window.WORLD_ENGINE_UI = (function() {
       + '<span class="we-sub-title">设置</span>'
       + '</div>'
       + renderSettingsForm()
-      + '<div class="we-section" style="margin-top:16px;"><div class="we-section-title">' + sectionHeader('存档点', 'checkpoint-section') + '</div>' + sectionBody('checkpoint-section', cpContent) + '</div>'
+      + '<div class="we-section" style="margin-top:16px;"><div class="we-section-title">' + sectionHeader(checkpointTitle(checkpoint, cpLayer), 'checkpoint-section') + '</div>' + sectionBody('checkpoint-section', cpContent) + '</div>'
       + '<div class="we-section" style="margin-top:8px;"><div class="we-section-title">调试</div><div>' + renderDebug() + '</div></div>';
   }
 
