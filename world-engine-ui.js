@@ -1394,10 +1394,8 @@ window.WORLD_ENGINE_UI = (function() {
     // 势力编辑器事件
     document.querySelectorAll('.we-faction-edit').forEach(button => {
       button.onclick = () => {
-        try {
-          editingFaction = { index: Number(button.dataset.factionIndex) };
-          refresh();
-        } catch(e) { console.error('[势力编辑]', e); showToast('编辑失败: ' + e.message, true); }
+        editingFaction = { index: Number(button.dataset.factionIndex) };
+        refresh();
       };
     });
     document.querySelectorAll('.we-faction-editor-close').forEach(button => {
@@ -1405,35 +1403,29 @@ window.WORLD_ENGINE_UI = (function() {
     });
     document.querySelectorAll('.we-faction-editor-save').forEach(button => {
       button.onclick = () => {
-        try {
-          const editor = button.closest('.we-event-editor');
-          if (!editor) { showToast('找不到编辑器', true); return; }
-          const index = Number(editor.dataset.factionIndex);
-          if (isNaN(index)) { showToast('无效的势力索引', true); return; }
-          const state = core.loadState();
-          const faction = state.factions?.[index];
-          if (!faction) { showToast('势力不存在', true); return; }
-          const nameInput = editor.querySelector('.we-faction-edit-name');
-          if (!nameInput) { showToast('找不到名称输入框', true); return; }
-          const name = nameInput.value.trim();
-          if (!name) { showToast('势力名称不能为空', true); return; }
-          faction.name = name;
-          faction.status = editor.querySelector('.we-faction-edit-status')?.value || faction.status;
-          faction.relation = editor.querySelector('.we-faction-edit-relation')?.value || faction.relation;
-          faction.scope = (editor.querySelector('.we-faction-edit-scope')?.value || '').trim();
-          faction.currentGoal = (editor.querySelector('.we-faction-edit-goal')?.value || '').trim();
-          faction.core_person = (editor.querySelector('.we-faction-edit-core')?.value || '').trim();
-          const pillars = [];
-          editor.querySelectorAll('.we-faction-edit-pillar').forEach(input => {
-            const v = input.value.trim().slice(0, 4);
-            if (v) pillars.push(v);
-          });
-          faction.powerPillars = pillars;
-          core.saveState(state);
-          editingFaction = null;
-          showToast('势力修改已保存');
-          refresh();
-        } catch(e) { console.error('[势力保存]', e); showToast('保存失败: ' + e.message, true); }
+        const editor = button.closest('.we-event-editor');
+        const index = Number(editor.dataset.factionIndex);
+        const state = core.loadState();
+        const faction = state.factions?.[index];
+        if (!faction) return;
+        const name = editor.querySelector('.we-faction-edit-name').value.trim();
+        if (!name) { showToast('势力名称不能为空', true); return; }
+        faction.name = name;
+        faction.status = editor.querySelector('.we-faction-edit-status').value;
+        faction.relation = editor.querySelector('.we-faction-edit-relation').value;
+        faction.scope = editor.querySelector('.we-faction-edit-scope').value.trim();
+        faction.currentGoal = editor.querySelector('.we-faction-edit-goal').value.trim();
+        faction.core_person = editor.querySelector('.we-faction-edit-core').value.trim();
+        const pillars = [];
+        editor.querySelectorAll('.we-faction-edit-pillar').forEach(input => {
+          const v = input.value.trim().slice(0, 4);
+          if (v) pillars.push(v);
+        });
+        faction.powerPillars = pillars;
+        core.saveState(state);
+        editingFaction = null;
+        showToast('势力修改已保存');
+        refresh();
       };
     });
     document.querySelectorAll('.we-faction-delete').forEach(button => {
@@ -1586,10 +1578,8 @@ window.WORLD_ENGINE_UI = (function() {
     // ===== 仇敌编辑器事件 =====
     document.querySelectorAll('.we-enemy-edit').forEach(button => {
       button.onclick = () => {
-        try {
-          editingEnemy = { index: Number(button.dataset.enemyIndex) };
-          refresh();
-        } catch(e) { console.error('[仇敌编辑]', e); showToast('编辑失败: ' + e.message, true); }
+        editingEnemy = { index: Number(button.dataset.enemyIndex) };
+        refresh();
       };
     });
     document.querySelectorAll('.we-enemy-editor-close').forEach(button => {
@@ -1597,27 +1587,21 @@ window.WORLD_ENGINE_UI = (function() {
     });
     document.querySelectorAll('.we-enemy-editor-save').forEach(button => {
       button.onclick = () => {
-        try {
-          const editor = button.closest('.we-event-editor');
-          if (!editor) { showToast('找不到编辑器', true); return; }
-          const index = Number(editor.dataset.enemyIndex);
-          if (isNaN(index)) { showToast('无效的仇敌索引', true); return; }
-          const state = core.loadState();
-          const enemy = state.enemies?.[index];
-          if (!enemy) { showToast('仇敌不存在', true); return; }
-          const nameInput = editor.querySelector('.we-enemy-edit-name');
-          if (!nameInput) { showToast('找不到名称输入框', true); return; }
-          const name = nameInput.value.trim();
-          if (!name) { showToast('仇敌名称不能为空', true); return; }
-          enemy.name = name;
-          enemy.type = editor.querySelector('.we-enemy-edit-type')?.value || enemy.type;
-          enemy.status = editor.querySelector('.we-enemy-edit-status')?.value || enemy.status;
-          enemy.reason = (editor.querySelector('.we-enemy-edit-reason')?.value || '').trim();
-          core.saveState(state);
-          editingEnemy = null;
-          showToast('仇敌修改已保存');
-          refresh();
-        } catch(e) { console.error('[仇敌保存]', e); showToast('保存失败: ' + e.message, true); }
+        const editor = button.closest('.we-event-editor');
+        const index = Number(editor.dataset.enemyIndex);
+        const state = core.loadState();
+        const enemy = state.enemies?.[index];
+        if (!enemy) return;
+        const name = editor.querySelector('.we-enemy-edit-name').value.trim();
+        if (!name) { showToast('仇敌名称不能为空', true); return; }
+        enemy.name = name;
+        enemy.type = editor.querySelector('.we-enemy-edit-type').value;
+        enemy.status = editor.querySelector('.we-enemy-edit-status').value;
+        enemy.reason = editor.querySelector('.we-enemy-edit-reason').value.trim();
+        core.saveState(state);
+        editingEnemy = null;
+        showToast('仇敌修改已保存');
+        refresh();
       };
     });
     document.querySelectorAll('.we-enemy-delete').forEach(button => {
@@ -1764,10 +1748,8 @@ window.WORLD_ENGINE_UI = (function() {
     // ===== 黑盒隐秘行为编辑器事件 =====
     document.querySelectorAll('.we-bba-edit').forEach(button => {
       button.onclick = () => {
-        try {
-          editingBBAction = { index: Number(button.dataset.bbaIndex) };
-          refresh();
-        } catch(e) { console.error('[隐秘行为编辑]', e); showToast('编辑失败: ' + e.message, true); }
+        editingBBAction = { index: Number(button.dataset.bbaIndex) };
+        refresh();
       };
     });
     document.querySelectorAll('.we-bba-editor-close').forEach(button => {
@@ -1775,25 +1757,19 @@ window.WORLD_ENGINE_UI = (function() {
     });
     document.querySelectorAll('.we-bba-editor-save').forEach(button => {
       button.onclick = () => {
-        try {
-          const editor = button.closest('.we-event-editor');
-          if (!editor) { showToast('找不到编辑器', true); return; }
-          const index = Number(editor.dataset.bbaIndex);
-          if (isNaN(index)) { showToast('无效索引', true); return; }
-          const state = core.loadState();
-          const a = state.blackbox?.secretActions?.[index];
-          if (!a) { showToast('隐秘行为不存在', true); return; }
-          const actionInput = editor.querySelector('.we-bba-edit-action');
-          if (!actionInput) { showToast('找不到输入框', true); return; }
-          const action = actionInput.value.trim();
-          if (!action) { showToast('行为描述不能为空', true); return; }
-          a.action = action;
-          a.witnesses = (editor.querySelector('.we-bba-edit-witnesses')?.value || '').trim() || '无';
-          core.saveState(state);
-          editingBBAction = null;
-          showToast('隐秘行为修改已保存');
-          refresh();
-        } catch(e) { console.error('[隐秘行为保存]', e); showToast('保存失败: ' + e.message, true); }
+        const editor = button.closest('.we-event-editor');
+        const index = Number(editor.dataset.bbaIndex);
+        const state = core.loadState();
+        const a = state.blackbox?.secretActions?.[index];
+        if (!a) return;
+        const action = editor.querySelector('.we-bba-edit-action').value.trim();
+        if (!action) { showToast('行为描述不能为空', true); return; }
+        a.action = action;
+        a.witnesses = editor.querySelector('.we-bba-edit-witnesses').value.trim() || '无';
+        core.saveState(state);
+        editingBBAction = null;
+        showToast('隐秘行为修改已保存');
+        refresh();
       };
     });
     document.querySelectorAll('.we-bba-delete').forEach(button => {
@@ -1825,31 +1801,27 @@ window.WORLD_ENGINE_UI = (function() {
     // 隐秘行为 → 隐秘资产（编辑器内切换）
     document.querySelectorAll('.we-bba-editor-switch').forEach(button => {
       button.onclick = () => {
-        try {
-          const index = Number(button.dataset.bbaIndex);
-          const state = core.loadState();
-          const a = state.blackbox?.secretActions?.[index];
-          if (a === undefined || a === null) return;
-          const src = (typeof a === 'string') ? { action: a } : a;
-          const asset = { name: src.action || '未命名', exposure: 0, status: '有效' };
-          state.blackbox.secretActions.splice(index, 1);
-          if (!Array.isArray(state.blackbox.secretAssets)) state.blackbox.secretAssets = [];
-          state.blackbox.secretAssets.push(asset);
-          core.saveState(state);
-          editingBBAction = null;
-          showToast('已转为隐秘资产');
-          refresh();
-        } catch(e) { console.error('[隐秘行为切换]', e); showToast('切换失败: ' + e.message, true); }
+        const index = Number(button.dataset.bbaIndex);
+        const state = core.loadState();
+        const a = state.blackbox?.secretActions?.[index];
+        if (a === undefined || a === null) return;
+        const src = (typeof a === 'string') ? { action: a } : a;
+        const asset = { name: src.action || '未命名', exposure: 0, status: '有效' };
+        state.blackbox.secretActions.splice(index, 1);
+        if (!Array.isArray(state.blackbox.secretAssets)) state.blackbox.secretAssets = [];
+        state.blackbox.secretAssets.push(asset);
+        core.saveState(state);
+        editingBBAction = null;
+        showToast('已转为隐秘资产');
+        refresh();
       };
     });
 
     // ===== 黑盒隐秘资产编辑器事件 =====
     document.querySelectorAll('.we-bbs-edit').forEach(button => {
       button.onclick = () => {
-        try {
-          editingBBAsset = { index: Number(button.dataset.bbsIndex) };
-          refresh();
-        } catch(e) { console.error('[隐秘资产编辑]', e); showToast('编辑失败: ' + e.message, true); }
+        editingBBAsset = { index: Number(button.dataset.bbsIndex) };
+        refresh();
       };
     });
     document.querySelectorAll('.we-bbs-editor-close').forEach(button => {
@@ -1857,26 +1829,20 @@ window.WORLD_ENGINE_UI = (function() {
     });
     document.querySelectorAll('.we-bbs-editor-save').forEach(button => {
       button.onclick = () => {
-        try {
-          const editor = button.closest('.we-event-editor');
-          if (!editor) { showToast('找不到编辑器', true); return; }
-          const index = Number(editor.dataset.bbsIndex);
-          if (isNaN(index)) { showToast('无效索引', true); return; }
-          const state = core.loadState();
-          const a = state.blackbox?.secretAssets?.[index];
-          if (!a) { showToast('隐秘资产不存在', true); return; }
-          const nameInput = editor.querySelector('.we-bbs-edit-name');
-          if (!nameInput) { showToast('找不到输入框', true); return; }
-          const name = nameInput.value.trim();
-          if (!name) { showToast('资产名称不能为空', true); return; }
-          a.name = name;
-          a.exposure = Math.min(100, Math.max(0, Number(editor.querySelector('.we-bbs-edit-exposure')?.value) || 0));
-          a.status = editor.querySelector('.we-bbs-edit-status')?.value || a.status;
-          core.saveState(state);
-          editingBBAsset = null;
-          showToast('隐秘资产修改已保存');
-          refresh();
-        } catch(e) { console.error('[隐秘资产保存]', e); showToast('保存失败: ' + e.message, true); }
+        const editor = button.closest('.we-event-editor');
+        const index = Number(editor.dataset.bbsIndex);
+        const state = core.loadState();
+        const a = state.blackbox?.secretAssets?.[index];
+        if (!a) return;
+        const name = editor.querySelector('.we-bbs-edit-name').value.trim();
+        if (!name) { showToast('资产名称不能为空', true); return; }
+        a.name = name;
+        a.exposure = Math.min(100, Math.max(0, Number(editor.querySelector('.we-bbs-edit-exposure').value) || 0));
+        a.status = editor.querySelector('.we-bbs-edit-status').value;
+        core.saveState(state);
+        editingBBAsset = null;
+        showToast('隐秘资产修改已保存');
+        refresh();
       };
     });
     document.querySelectorAll('.we-bbs-delete').forEach(button => {
@@ -1907,21 +1873,19 @@ window.WORLD_ENGINE_UI = (function() {
     // 隐秘资产 → 隐秘行为（编辑器内切换）
     document.querySelectorAll('.we-bbs-editor-switch').forEach(button => {
       button.onclick = () => {
-        try {
-          const index = Number(button.dataset.bbsIndex);
-          const state = core.loadState();
-          const a = state.blackbox?.secretAssets?.[index];
-          if (a === undefined || a === null) return;
-          const src = (typeof a === 'string') ? { name: a } : a;
-          const action = { action: src.name || '未命名', witnesses: '无' };
-          state.blackbox.secretAssets.splice(index, 1);
-          if (!Array.isArray(state.blackbox.secretActions)) state.blackbox.secretActions = [];
-          state.blackbox.secretActions.push(action);
-          core.saveState(state);
-          editingBBAsset = null;
-          showToast('已转为隐秘行为');
-          refresh();
-        } catch(e) { console.error('[隐秘资产切换]', e); showToast('切换失败: ' + e.message, true); }
+        const index = Number(button.dataset.bbsIndex);
+        const state = core.loadState();
+        const a = state.blackbox?.secretAssets?.[index];
+        if (a === undefined || a === null) return;
+        const src = (typeof a === 'string') ? { name: a } : a;
+        const action = { action: src.name || '未命名', witnesses: '无' };
+        state.blackbox.secretAssets.splice(index, 1);
+        if (!Array.isArray(state.blackbox.secretActions)) state.blackbox.secretActions = [];
+        state.blackbox.secretActions.push(action);
+        core.saveState(state);
+        editingBBAsset = null;
+        showToast('已转为隐秘行为');
+        refresh();
       };
     });
 
