@@ -59,7 +59,9 @@ window.WORLD_ENGINE_UI = (function() {
     influence: '牵枝而动叶',
     reputation: '人之有誉，如影随形',
     factions: '大树之下，草不沾霜',
-    enemies: '仇者快，亲者痛'
+    enemies: '仇者快，亲者痛',
+    economy: '食者民之本，货者民用之资',
+    blackbox: '墙有耳，伏寇在侧'
   };
 
   function sectionHeader(title, sectionId) {
