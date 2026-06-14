@@ -98,7 +98,10 @@ window.WORLD_ENGINE_UI = (function() {
             <span class="we-header-mood-text"></span>
           </div>
         </div>
-        <button class="we-panel-close">✕</button>
+        <div class="we-panel-corner-actions">
+          <button class="we-panel-close">✕</button>
+          <button class="we-panel-settings" id="we-btn-settings-open" title="设置"><i class="fa-solid fa-gear"></i></button>
+        </div>
       </div>
       <div class="we-panel-body" id="we-panel-body">
         <div class="we-loading">加载中...</div>
@@ -338,15 +341,7 @@ window.WORLD_ENGINE_UI = (function() {
         + '</div>';
     }).join('');
 
-    return '<div class="we-home-topbar">'
-      + '<div class="we-actions-bar">'
-      + '<button class="we-btn we-btn-primary" id="we-btn-redo" title="把存档点喂给后台推演，重出本轮结果">重新推演</button>'
-      + '<button class="we-btn we-btn-primary" id="we-btn-forward" title="把当前状态喂给后台推演，向前推进一轮">向前推演</button>'
-      + '<button class="we-btn we-btn-danger" id="we-btn-abort" style="background:var(--we-danger);color:#fff;" disabled>停止推演</button>'
-      + '</div>'
-      + '<button class="we-icon-btn" id="we-btn-settings-open" title="设置"><i class="fa-solid fa-gear"></i></button>'
-      + '</div>'
-      + renderWorldCore(s)
+    return renderWorldCore(s)
       + '<div class="we-nav-list" style="--we-tier-color:' + tierColor + ';">' + navRows + '</div>'
       + '<div class="we-section" id="we-sec-digest"><div class="we-section-title">世界摘要</div><div class="we-digest">' + u(s.worldDigest) + '</div></div>';
   }
@@ -377,10 +372,10 @@ window.WORLD_ENGINE_UI = (function() {
 
   /** 存档点小标题：青色默认小字 + 「- N轮 - M层」 */
   function checkpointTitle(checkpoint, cpLayer) {
-    if (!checkpoint) return '<span style="color:var(--we-accent);font-size:12px;font-weight:400;">存档点</span>';
+    if (!checkpoint) return '存档点';
     const round = checkpoint.round || 0;
     const layer = (cpLayer === undefined || cpLayer === null) ? '-' : cpLayer;
-    return '<span style="color:var(--we-accent);font-size:12px;font-weight:400;">存档点 - ' + round + ' 轮 - ' + layer + ' 层</span>';
+    return '存档点 - ' + round + ' 轮 - ' + layer + ' 层';
   }
 
   function renderSettingsView(checkpoint, cpLayer) {
@@ -391,9 +386,21 @@ window.WORLD_ENGINE_UI = (function() {
       + '<button class="we-icon-btn" id="we-btn-back" title="返回"><i class="fa-solid fa-arrow-left"></i></button>'
       + '<span class="we-sub-title">设置</span>'
       + '</div>'
+      + '<div class="we-settings-evolve-actions">'
+      + '<button class="we-btn we-btn-primary" id="we-btn-redo" title="把存档点喂给后台推演，重出本轮结果">重新推演</button>'
+      + '<button class="we-btn we-btn-primary" id="we-btn-forward" title="把当前状态喂给后台推演，向前推进一轮">向前推演</button>'
+      + '<button class="we-btn we-btn-danger" id="we-btn-abort" style="background:var(--we-danger);color:#fff;" disabled>停止推演</button>'
+      + '</div>'
       + renderSettingsForm()
       + '<div class="we-section" style="margin-top:16px;"><div class="we-section-title">' + sectionHeader(checkpointTitle(checkpoint, cpLayer), 'checkpoint-section') + '</div>' + sectionBody('checkpoint-section', cpContent) + '</div>'
-      + '<div class="we-section" style="margin-top:8px;"><div class="we-section-title">调试</div><div>' + renderDebug() + '</div></div>';
+      + '<div class="we-settings-save-actions">'
+      + '<button class="we-btn" id="we-save-settings">保存设置</button>'
+      + '<button class="we-btn we-btn-danger" id="we-reset-world">重置世界</button>'
+      + '</div>'
+      + renderSettingsAfterCheckpoint()
+      + '<div class="we-section we-debug-section" style="margin-top:8px;">'
+      + '<div class="we-section-title"><span class="we-debug-toggle" title="展开或收起调试信息"><span class="we-toggle-arrow">▶</span>调试</span></div>'
+      + '<div id="we-debug-body" style="display:none;">' + renderDebug() + '</div></div>';
   }
 
   function renderCheckpointSections(s, layer) {
@@ -1294,12 +1301,19 @@ window.WORLD_ENGINE_UI = (function() {
         <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">关闭后不会将当前状态或存档点注入聊天正文。</div>
       </div>`;
 
+    return sec('set-api', 'API 配置', apiBody)
+      + sec('set-evolve', '推演模式', evolveBody)
+      + sec('set-inject', '正文注入', injectBody);
+  }
+
+  function renderSettingsAfterCheckpoint() {
+    const sec = (id, title, body) =>
+      '<div class="we-section"><div class="we-section-title">' + sectionHeader(title, id) + '</div>' +
+      sectionBody(id, body) + '</div>';
     const worldbookBody = `
       <div class="we-worldbook-settings">
         <div class="we-worldbook-header">
-          <div>
-            <div class="we-worldbook-summary" id="we-worldbook-summary">正在读取当前聊天世界书...</div>
-          </div>
+          <div><div class="we-worldbook-summary" id="we-worldbook-summary">正在读取当前聊天世界书...</div></div>
           <button class="we-icon-btn" id="we-worldbook-reload" title="重新读取当前聊天世界书"><i class="fa-solid fa-rotate"></i></button>
         </div>
         <div class="we-worldbook-toolbar">
@@ -1307,26 +1321,15 @@ window.WORLD_ENGINE_UI = (function() {
           <button class="we-btn" id="we-worldbook-clear-all">取消全选</button>
           <button class="we-btn we-btn-primary" id="we-worldbook-save">保存世界书选择</button>
         </div>
-        <div class="we-worldbook-list" id="we-worldbook-list">
-          <div class="we-empty">正在读取...</div>
-        </div>
+        <div class="we-worldbook-list" id="we-worldbook-list"><div class="we-empty">正在读取...</div></div>
       </div>`;
-
     const dataBody = `
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
         <button class="we-btn" id="we-export-data">导出 JSON</button>
         <button class="we-btn" id="we-import-data">导入 JSON</button>
         <input type="file" id="we-import-file" accept=".json" style="display:none;">
       </div>`;
-
-    return sec('set-api', 'API 配置', apiBody)
-      + sec('set-evolve', '推演模式', evolveBody)
-      + sec('set-inject', '正文注入', injectBody)
-      + `<div style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0;">
-           <button class="we-btn" id="we-save-settings">保存设置</button>
-           <button class="we-btn we-btn-danger" id="we-reset-world" style="margin-left:0;">重置世界</button>
-         </div>`
-      + sec('set-worldbook', '后台推演世界书', worldbookBody)
+    return sec('set-worldbook', '后台推演世界书', worldbookBody)
       + sec('set-data', '数据导入/导出', dataBody);
   }
 

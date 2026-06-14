@@ -198,6 +198,7 @@
   font-weight: 700;
   letter-spacing: 3px;
   color: var(--we-text2);
+  transform: translateY(3px);
 }
 
 /* ===== 状态条（始终可见） ===== */
@@ -250,6 +251,31 @@
 
 .we-panel-close:hover { color: var(--we-text); }
 
+.we-panel-corner-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
+  flex-shrink: 0;
+}
+.we-panel-settings {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--we-text3);
+  cursor: pointer;
+}
+.we-panel-settings:hover {
+  color: var(--we-accent);
+  border-color: var(--we-border);
+  background: rgba(255,255,255,0.025);
+}
+
 /* ===== 标签栏 ===== */
 .we-tabs {
   display: flex;
@@ -291,6 +317,22 @@
   gap: 8px;
   margin-bottom: 12px;
   flex-wrap: wrap;
+}
+
+.we-settings-evolve-actions,
+.we-settings-save-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.we-settings-evolve-actions {
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--we-border);
+}
+.we-settings-save-actions {
+  margin: 10px 0;
 }
 
 .we-evolve-result {
@@ -1666,6 +1708,15 @@
   color: var(--we-text3);
 }
 
+.we-debug-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+.we-debug-toggle:hover { opacity: 0.8; }
+
 .we-settings-body {
   /* 默认展开，由 JS 控制折叠 */
 }
@@ -2683,19 +2734,29 @@
 #we-sec-blackbox > .we-section-title .we-section-arrow,
 #we-sec-cp-blackbox > .we-section-title .we-section-arrow { color: #79709a; opacity: 0.38; }
 
-/* 存档点：封存此刻 —— 中性钢灰（外层无 id，用 :has 命中其标题） */
-.we-section-title:has(.we-section-toggle[data-section="checkpoint-section"]) {
-  font-family: "SimSun", "宋体", "Songti SC", "STSong", serif;
-  font-size: 17px;
-  font-weight: 400;
-  letter-spacing: 0.14em;
-  color: #8a93a0;
-  padding-bottom: 7px;
-  margin-bottom: 9px;
-  border-bottom: 1px solid rgba(138, 147, 160, 0.16);
-}
+/* 存档点标题与设置页其他小标题一致 */
 .we-section-title:has(.we-section-toggle[data-section="checkpoint-section"]) .we-section-arrow {
-  color: #8a93a0; opacity: 0.4; font-size: 8px;
+  color: var(--we-text3);
+  opacity: 1;
+  font-size: 10px;
+}
+
+/* 存档点内天下大势标题采用分页标题样式 */
+#we-sec-cp-trends > .we-section-title {
+  font-family: "SimSun", "宋体", "Songti SC", "STSong", serif;
+  font-size: 20px;
+  font-weight: 400;
+  color: var(--we-beige);
+  letter-spacing: 0.18em;
+  line-height: 1;
+  padding-bottom: 8px;
+  margin-bottom: 9px;
+  border-bottom: 1px solid var(--we-border);
+}
+#we-sec-cp-trends > .we-section-title .we-section-arrow {
+  color: var(--we-text3);
+  opacity: 1;
+  font-size: 8px;
 }
 
 /* ===== 编辑按钮：默认隐藏，单击条目卡片才显示（移动端无悬停） ===== */
