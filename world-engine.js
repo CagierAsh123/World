@@ -253,7 +253,14 @@
         {
           const L = core.getChatLayer();
           const cp = core.restoreCheckpoint();
-          const anchor = cp ? Number(cp.chatLayer) : L;
+          let anchor;
+          if (cp) {
+            anchor = Number(cp.chatLayer);
+          } else {
+            let fp = Number(core.loadFingerprint()) || 0;
+            if (!fp) { core.saveFingerprint(String(L)); fp = L; }
+            anchor = fp;
+          }
           const c = Math.floor(Math.max(0, L - anchor) / 2);
           const doEvolve = c > 0 && c % everyX === 0;
 
