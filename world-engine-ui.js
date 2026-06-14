@@ -49,10 +49,25 @@ window.WORLD_ENGINE_UI = (function() {
     if (duration !== 0) setTimeout(() => el.remove(), duration || 3000);
   }
 
+  // 各分页小标题的随附古文（去 cp- 前缀后查表；设置页等不在表中则无）
+  const SECTION_MOTTOS = {
+    trends: '天下之势，以渐而成',
+    regional: '一方有警，四面皆惊',
+    ledger: '毫厘皆有来历',
+    events: '牵一发而全身动',
+    winds: '风起于青萍之末',
+    influence: '牵枝而动叶',
+    reputation: '人之有誉，如影随形',
+    factions: '大树之下，草不沾霜',
+    enemies: '仇者快，亲者痛'
+  };
+
   function sectionHeader(title, sectionId) {
     const collapsed = sectionCollapsed[sectionId] || false;
+    const motto = SECTION_MOTTOS[sectionId.replace(/^cp-/, '')];
+    const mottoHtml = motto ? `<span class="we-section-motto">— ${motto}</span>` : '';
     return `<span class="we-section-toggle" data-section="${sectionId}">
-      <span class="we-section-arrow" id="we-section-arrow-${sectionId}">${collapsed ? '▶' : '▼'}</span>${title}
+      <span class="we-section-arrow" id="we-section-arrow-${sectionId}">${collapsed ? '▶' : '▼'}</span>${title}${mottoHtml}
     </span>`;
   }
 
@@ -828,19 +843,28 @@ window.WORLD_ENGINE_UI = (function() {
     const levelColors = { '天怒人怨':'#e05555', '声名狼藉':'#d97a5a', '默默无闻':'#7a8a9a', '受人尊敬':'#6cae8e', '万众敬仰':'#c9a45c' };
     const legacyMap = { '小有名气':'受人尊敬' };
     const dimLabels = { authority:'朝堂', common:'市井', shadow:'草莽', circuit:'同道' };
+    // 各维度 × 各等级的随附古文（出处略）
+    const quotes = {
+      authority: { '天怒人怨':'上下疾之如仇', '声名狼藉':'在位皆言其恶', '默默无闻':'沉于下寮不见知', '受人尊敬':'群臣莫不敬惮', '万众敬仰':'天下想望其风采' },
+      common:    { '天怒人怨':'行人指目相戒', '声名狼藉':'里中无赖子亦耻之', '默默无闻':'出入市廛人莫识', '受人尊敬':'闾里称其长者', '万众敬仰':'儿童走卒皆知其名' },
+      shadow:    { '天怒人怨':'绿林亦不肯纳', '声名狼藉':'豪杰闻而鄙之', '默默无闻':'混迹渔樵无人问', '受人尊敬':'江湖豪杰多归之', '万众敬仰':'四海之内皆称其侠' },
+      circuit:   { '天怒人怨':'同辈羞与为伍', '声名狼藉':'友朋面斥其非', '默默无闻':'独行无人与语', '受人尊敬':'同门推为领袖', '万众敬仰':'吾辈望之如泰山' }
+    };
     return '<div class="we-rep-grid">' + Object.entries(rep).filter(([k]) => k !== 'lastChange').map(([key, rawVal]) => {
       const val = legacyMap[rawVal] || rawVal;
       const cn = dimLabels[key] || key;
       const idx = levels.indexOf(val);
       const color = levelColors[val] || '#888';
-      return `<div class="we-rep-card" style="border-left:3px solid ${color};">
+      const quote = (quotes[key] && quotes[key][val]) || '';
+      const dotsHtml = levels.map((l, i) => {
+        const active = i <= idx ? ' we-rep-dot-active' : '';
+        const dotColor = i <= idx ? color : '#444';
+        return `<span class="we-rep-dot${active}" style="background:${dotColor};" data-dim="${key}" data-level="${l}" title="${l}"></span>`;
+      }).join('');
+      return `<div class="we-rep-row">
         <span class="we-rep-dim">${cn}</span>
-        <div class="we-rep-dots">${levels.map((l, i) => {
-          const active = i <= idx ? ' we-rep-dot-active' : '';
-          const dotColor = i <= idx ? color : '#444';
-          return `<span class="we-rep-dot${active}" style="background:${dotColor};" data-dim="${key}" data-level="${l}" title="${l}"></span>`;
-        }).join('')}</div>
-        <span class="we-rep-val" style="color:${color}">${val}</span>
+        <div class="we-rep-dots">${dotsHtml}</div>
+        <span class="we-rep-quote" style="color:${color}">${quote}</span>
       </div>`;
     }).join('') + '</div>';
   }
