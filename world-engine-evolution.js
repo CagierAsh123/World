@@ -889,6 +889,7 @@ ${extraInstruction ? '\n' + extraInstruction : ''}`;
 
       // 推演成功 → 存档点推进（backup 即推演前状态）
       if (isNew) {
+        backup.chatLayer = core.getChatLayer();   // 给存档点盖上推演时的层数，否则计数器拿不到层会退回指纹（标尺差1）
         core.saveCheckpoint(backup);
         core.saveFingerprint(core.getChatFingerprint());
         console.log('[世界引擎] ✅ 推演完成，新轮次第', state.round, '轮，存档点已推进');
