@@ -667,6 +667,125 @@
   transition: width 0.3s;
 }
 
+/* ===== 事件链进度条动态状态 ===== */
+
+.we-event-progress {
+  position: relative;
+  overflow: hidden;
+}
+
+.we-event-progress > div {
+  position: relative;
+  transform-origin: left center;
+}
+
+/* 成功：向右一冲，然后慢慢回稳 */
+.we-event-progress-success > div {
+  animation: we-event-progress-success-surge 1.25s cubic-bezier(.18,.9,.22,1) 1;
+}
+
+/* 成功时的领头光 */
+.we-event-progress-success > div::after {
+  content: "";
+  position: absolute;
+  top: -2px;
+  right: -10px;
+  width: 22px;
+  height: 7px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(255,255,255,0.85), transparent 68%);
+  opacity: 0;
+  animation: we-event-progress-head-flash 1.25s ease-out 1;
+}
+
+@keyframes we-event-progress-success-surge {
+  0%   { transform: scaleX(1); filter: brightness(1); }
+  22%  { transform: scaleX(1.075); filter: brightness(1.45); }
+  48%  { transform: scaleX(1.025); filter: brightness(1.18); }
+  100% { transform: scaleX(1); filter: brightness(1); }
+}
+
+@keyframes we-event-progress-head-flash {
+  0%   { opacity: 0; transform: translateX(-16px) scaleX(0.4); }
+  18%  { opacity: 0.95; transform: translateX(5px) scaleX(1.2); }
+  55%  { opacity: 0.28; transform: translateX(14px) scaleX(0.8); }
+  100% { opacity: 0; transform: translateX(18px) scaleX(0.5); }
+}
+
+/* 保持：原地来回蠕动 */
+.we-event-progress-hold > div {
+  animation: we-event-progress-hold-worm 2.1s ease-in-out infinite;
+}
+
+.we-event-progress-hold::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 42%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent);
+  animation: we-event-progress-hold-shimmer 2.1s ease-in-out infinite;
+}
+
+@keyframes we-event-progress-hold-worm {
+  0%, 100% { transform: translateX(0) scaleX(1); filter: brightness(1); }
+  25%      { transform: translateX(2px) scaleX(1.018); filter: brightness(1.12); }
+  50%      { transform: translateX(-1px) scaleX(0.992); filter: brightness(0.95); }
+  75%      { transform: translateX(1px) scaleX(1.01); filter: brightness(1.08); }
+}
+
+@keyframes we-event-progress-hold-shimmer {
+  0%   { transform: translateX(-55%); opacity: 0; }
+  35%  { opacity: 0.75; }
+  65%  { opacity: 0.35; }
+  100% { transform: translateX(185%); opacity: 0; }
+}
+
+/* 受挫：轻微向左掉一下，底色稍微灰一点，然后慢慢回去 */
+.we-event-progress-fail {
+  animation: we-event-progress-fail-bg 1.45s ease-out 1;
+}
+
+.we-event-progress-fail > div {
+  animation: we-event-progress-fail-drop 1.45s cubic-bezier(.24,.02,.22,1) 1;
+}
+
+@keyframes we-event-progress-fail-drop {
+  0% {
+    transform: translateX(0) scaleX(1);
+    filter: brightness(1) saturate(1);
+  }
+
+  22% {
+    transform: translateX(-5px) scaleX(0.975);
+    filter: brightness(0.9) saturate(0.88);
+  }
+
+  55% {
+    transform: translateX(-2px) scaleX(0.99);
+    filter: brightness(0.96) saturate(0.94);
+  }
+
+  100% {
+    transform: translateX(0) scaleX(1);
+    filter: brightness(1) saturate(1);
+  }
+}
+
+@keyframes we-event-progress-fail-bg {
+  0% {
+    background: var(--we-bg2);
+  }
+
+  24% {
+    background: rgba(150, 160, 166, 0.18);
+  }
+
+  100% {
+    background: var(--we-bg2);
+  }
+}
+
 .we-icon-btn {
   width: 24px;
   height: 22px;

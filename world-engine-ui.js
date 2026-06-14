@@ -576,7 +576,14 @@ window.WORLD_ENGINE_UI = (function() {
       let progressHtml = '';
       if (!isTerminal) {
         const pct = Math.round((e.stageRound / 9) * 100);
-        progressHtml = `<div class="we-event-progress">
+
+        const progressMotionClass = {
+          '成功': 'we-event-progress-success',
+          '保持': 'we-event-progress-hold',
+          '受挫': 'we-event-progress-fail'
+        }[e.evolveResult] || '';
+
+        progressHtml = `<div class="we-event-progress ${progressMotionClass}">
           <div style="width:${pct}%;background:${color};"></div>
         </div>`;
       }
