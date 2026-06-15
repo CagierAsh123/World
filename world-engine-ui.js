@@ -1283,7 +1283,7 @@ window.WORLD_ENGINE_UI = (function() {
     const settings = window.WORLD_ENGINE_API
       ? window.WORLD_ENGINE_API.getSettings(true)
       : JSON.parse(window.WORLD_ENGINE_STORE.getItem('world_engine_settings') || '{}');
-    const mode = settings.evolveMode === 'manual' ? 'manual' : 'auto';
+    const mode = (settings.evolveMode === 'manual' || settings.evolveMode === 'time') ? settings.evolveMode : 'auto';
     const everyX = Math.max(1, parseInt(settings.evolveEveryX) || 1);
     const readRounds = Math.min(everyX, Math.max(1, parseInt(settings.evolveReadRounds) || 1));
     // 按时间模式的当前值
