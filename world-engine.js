@@ -262,7 +262,7 @@
           const cp = core.restoreCheckpoint();
           if (!st || st.time == null || !cp || cp.time == null) {
             lastProcessedMessageKey = currentKey;
-            setStatus('请在设置填入存档点和当前状态的时间', true);
+            setStatus('存档点与当前状态时间为空，请在设置填写', false);
             if (ui) ui.refresh(true);
             return;
           }
@@ -270,7 +270,7 @@
           if (currentDay == null) {
             core.setLastStoryDay(null);
             lastProcessedMessageKey = currentKey;
-            setStatus('未获取时间', true);
+            setStatus('未获取时间', false);
             if (ui) ui.refresh(true);
             return;
           }
@@ -386,7 +386,7 @@
         const st = core.hasState() ? core.loadState() : null;
         const cp = core.restoreCheckpoint();
         if (!st || st.time == null || !cp || cp.time == null) {
-          setStatus('请在设置填入存档点和当前状态的时间', true);
+          setStatus('存档点与当前状态时间为空，请在设置填写', false);
           return;
         }
         core.setLastStoryDay(currentDay);
