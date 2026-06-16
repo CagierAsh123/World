@@ -13,6 +13,7 @@ window.WORLD_ENGINE_API = (function() {
       maxTokens: 2000,
       injectIntoPrompt: true,
       evolveMode: 'auto',
+      worldbookTrigger: false, // 世界书蓝绿灯触发：🔵常驻恒注入 / 🟢关键词命中才注入（默认关闭=全部已选注入）
       evolveEveryX: 1,
       evolveReadRounds: 1,
       evolveFilterRegex: '',

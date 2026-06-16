@@ -25,6 +25,7 @@ window.WORLD_ENGINE_UI = (function() {
   // 世界书缓存（模块级，跨 refresh() 存活）
   let _wbCachedEntries = null;
   let _wbCachedSelectedIds = null;
+  let _wbCachedOverrides = null;
   let _wbCachedChatId = null;
   let _wbScrollTop = 0;
 
@@ -1420,6 +1421,13 @@ window.WORLD_ENGINE_UI = (function() {
       sectionBody(id, body) + '</div>';
     const worldbookBody = `
       <div class="we-worldbook-settings">
+        <div class="we-input-group">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="we-worldbook-trigger" ${settings.worldbookTrigger === true ? 'checked' : ''}>
+            启用蓝绿灯触发（跟随酒馆世界书）
+          </label>
+          <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">关闭时：已选条目全部注入推演（现状）。开启后：🔵常驻条目恒注入，🟢关键词条目仅在近期对话命中其关键词时注入；每条可单独覆写。关键词扫描由本扩展自行完成，与酒馆解耦。</div>
+        </div>
         <div class="we-worldbook-header">
           <div><div class="we-worldbook-summary" id="we-worldbook-summary">正在读取当前聊天世界书...</div></div>
           <button class="we-icon-btn" id="we-worldbook-reload" title="重新读取当前聊天世界书"><i class="fa-solid fa-rotate"></i></button>
@@ -2160,6 +2168,7 @@ window.WORLD_ENGINE_UI = (function() {
           const savedIds = worldbook.getSelectedIds();
           _wbCachedEntries = entries;
           _wbCachedChatId = currentChatId;
+          _wbCachedOverrides = worldbook.getOverrides ? { ...worldbook.getOverrides() } : {};
           // 首次进入该聊天（存储中无记录）则自动全选启用条目
           if (isFirstVisit && entries.length) {
             const allIds = entries.filter(e => !e.disabled).map(e => e.id);
@@ -2182,6 +2191,7 @@ window.WORLD_ENGINE_UI = (function() {
           if (summary) summary.textContent = '读取失败';
           _wbCachedEntries = null;
           _wbCachedSelectedIds = null;
+          _wbCachedOverrides = null;
           _wbCachedChatId = null;
         } finally {
           if (reloadBtn) reloadBtn.disabled = false;
@@ -2191,6 +2201,8 @@ window.WORLD_ENGINE_UI = (function() {
       function renderWorldbookList() {
         const entries = _wbCachedEntries;
         const selectedIds = _wbCachedSelectedIds || new Set();
+        const overrides = _wbCachedOverrides || {};
+        const triggerOn = !!(window.WORLD_ENGINE_WORLDBOOK?.triggerEnabled?.());
         if (!entries || !entries.length) {
           worldbookList.innerHTML = '<div class="we-empty">当前聊天未关联可读取的世界书条目</div>';
           if (summary) summary.textContent = '0 条可选';
@@ -2216,14 +2228,29 @@ window.WORLD_ENGINE_UI = (function() {
               </div>
             </div>
             <div class="we-worldbook-group-body" style="${expanded ? '' : 'display:none;'}">
-            ${worldEntries.map(entry => `
-              <label class="we-worldbook-entry${entry.disabled ? ' is-disabled' : ''}">
-                <input class="we-worldbook-entry-check" type="checkbox" value="${u(entry.id)}" data-chars="${entry.content.length}" ${selectedIds.has(entry.id) && !entry.disabled ? 'checked' : ''} ${entry.disabled ? 'disabled' : ''}>
-                <span>
-                  <strong>${u(entry.title)}</strong>
-                  <small>${entry.content.length} 字符${entry.disabled ? ' · 世界书内已停用' : ''}</small>
-                </span>
-              </label>`).join('')}
+            ${worldEntries.map(entry => {
+              const keys = entry.keys || [];
+              const badge = entry.constant ? '🔵' : (entry.vectorized ? '🔗' : (keys.length ? '🟢' : '⚪'));
+              const keyHint = keys.length ? ' · 关键词：' + keys.slice(0, 5).join('、') + (keys.length > 5 ? '…' : '') : '';
+              const ov = overrides[entry.id] || 'auto';
+              const overrideSel = (triggerOn && !entry.disabled) ? `
+                <select class="we-wb-override" data-entry-id="${u(entry.id)}" title="该条触发方式">
+                  <option value="auto"${ov === 'auto' ? ' selected' : ''}>跟随酒馆</option>
+                  <option value="const"${ov === 'const' ? ' selected' : ''}>强制常驻</option>
+                  <option value="key"${ov === 'key' ? ' selected' : ''}>强制关键词</option>
+                  <option value="off"${ov === 'off' ? ' selected' : ''}>关闭</option>
+                </select>` : '';
+              return `
+              <div class="we-worldbook-entry${entry.disabled ? ' is-disabled' : ''}">
+                <label class="we-wb-entry-main">
+                  <input class="we-worldbook-entry-check" type="checkbox" value="${u(entry.id)}" data-chars="${entry.content.length}" ${selectedIds.has(entry.id) && !entry.disabled ? 'checked' : ''} ${entry.disabled ? 'disabled' : ''}>
+                  <span>
+                    <strong>${badge} ${u(entry.title)}</strong>
+                    <small>${entry.content.length} 字符${u(keyHint)}${entry.disabled ? ' · 世界书内已停用' : ''}</small>
+                  </span>
+                </label>${overrideSel}
+              </div>`;
+            }).join('')}
             </div>
           </div>`;
         }).join('');
@@ -2231,6 +2258,15 @@ window.WORLD_ENGINE_UI = (function() {
             checkbox.onchange = () => {
               _wbCachedSelectedIds = new Set([...worldbookList.querySelectorAll('.we-worldbook-entry-check:checked')].map(cb => cb.value));
               updateWorldbookSummary();
+            };
+          });
+          worldbookList.querySelectorAll('.we-wb-override').forEach(sel => {
+            sel.onchange = () => {
+              const id = sel.dataset.entryId;
+              if (!id) return;
+              if (!_wbCachedOverrides) _wbCachedOverrides = {};
+              if (sel.value === 'auto') delete _wbCachedOverrides[id];
+              else _wbCachedOverrides[id] = sel.value;
             };
           });
           worldbookList.querySelectorAll('.we-worldbook-group-header').forEach(header => {
@@ -2280,9 +2316,20 @@ window.WORLD_ENGINE_UI = (function() {
         });
       };
       if (saveWorldbookBtn) saveWorldbookBtn.onclick = () => {
-        worldbook.saveSelectedIds([..._wbCachedSelectedIds]);
+        const ids = [..._wbCachedSelectedIds];
+        if (worldbook.saveSelection) worldbook.saveSelection(ids, _wbCachedOverrides || {});
+        else worldbook.saveSelectedIds(ids);
         showToast(`已保存 ${_wbCachedSelectedIds.size} 条后台世界书条目`);
         updateWorldbookSummary();
+      };
+      const triggerBox = document.getElementById('we-worldbook-trigger');
+      if (triggerBox) triggerBox.onchange = () => {
+        const wapi = window.WORLD_ENGINE_API;
+        const cur = wapi && wapi.getSettings ? wapi.getSettings(true) : {};
+        window.WORLD_ENGINE_STORE.setItem('world_engine_settings', JSON.stringify({ ...cur, worldbookTrigger: triggerBox.checked }));
+        if (wapi && wapi.getSettings) wapi.getSettings(true);
+        showToast(triggerBox.checked ? '已开启蓝绿灯触发' : '已关闭蓝绿灯触发（恢复全部已选注入）');
+        renderWorldbookList(); // 重渲染以显示/隐藏每条的触发覆写下拉
       };
       // refresh() 重建 DOM 时，如果 chatId 未变且已有缓存，直接渲染，避免勾选丢失
       const currentChatIdNow = worldbook.getChatId ? worldbook.getChatId() : (window.WORLD_ENGINE_CORE?.getChatId?.() || 'default');
