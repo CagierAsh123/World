@@ -193,29 +193,35 @@ window.WORLD_ENGINE_WORLDBOOK = (function() {
     return caseSensitive ? text.indexOf(needle) !== -1 : text.toLowerCase().indexOf(needle.toLowerCase()) !== -1;
   }
 
-  // 一条已选条目在本轮扫描文本下是否应注入。
+  // 返回 {active, reason}：reason 供控制台诊断，说明这条为何注入/跳过。
   // mode：auto(跟随酒馆) / const(强制常驻) / key(强制关键词) / off(关闭)。
-  function isEntryActive(entry, scanText, mode) {
+  function activationOf(entry, scanText, mode) {
     const m = mode || 'auto';
-    if (m === 'off') return false;
-    if (m === 'const') return true;
-    if (m === 'auto' && entry.constant) return true;            // 🔵 常驻：恒注入
+    if (m === 'off') return { active: false, reason: '关闭(覆写)' };
+    if (m === 'const') return { active: true, reason: '强制常驻(覆写)' };
+    if (m === 'auto' && entry.constant) return { active: true, reason: '🔵常驻' };
     // 🟢 关键词路径（m==='key' 强制走关键词；m==='auto' 且非常驻条目）
     const primary = entry.keys || [];
-    if (!primary.length) return false;                          // 无主关键词的非常驻条目不会被触发（与酒馆一致）
+    if (!primary.length) return { active: false, reason: entry.vectorized ? '🔗向量条目(不触发)' : '无主关键词' };
     const cs = entry.caseSensitive, mw = entry.matchWholeWords;
-    if (!primary.some(k => matchKey(scanText, k, cs, mw))) return false;
+    const hitKey = primary.find(k => matchKey(scanText, k, cs, mw));
+    if (!hitKey) return { active: false, reason: '🟢未命中' };
     const sec = entry.secondaryKeys || [];
-    if (!entry.selective || !sec.length) return true;
+    if (!entry.selective || !sec.length) return { active: true, reason: '🟢命中「' + hitKey + '」' };
     const anySec = sec.some(k => matchKey(scanText, k, cs, mw));
     const allSec = sec.every(k => matchKey(scanText, k, cs, mw));
+    let ok;
     switch (entry.selectiveLogic) {
-      case LOGIC.AND_ALL: return allSec;
-      case LOGIC.NOT_ALL: return !allSec;
-      case LOGIC.NOT_ANY: return !anySec;
-      case LOGIC.AND_ANY:
-      default: return anySec;
+      case LOGIC.AND_ALL: ok = allSec; break;
+      case LOGIC.NOT_ALL: ok = !allSec; break;
+      case LOGIC.NOT_ANY: ok = !anySec; break;
+      default: ok = anySec; // AND_ANY
     }
+    return { active: ok, reason: ok ? ('🟢命中「' + hitKey + '」+次键') : '🟢主命中但次键逻辑不满足' };
+  }
+
+  function isEntryActive(entry, scanText, mode) {
+    return activationOf(entry, scanText, mode).active;
   }
 
   // scanText：本扩展喂给推演的上下文文本（近期对话等）。触发关闭时忽略，维持「全部已选注入」的现状。
@@ -233,9 +239,22 @@ window.WORLD_ENGINE_WORLDBOOK = (function() {
       const pool = entries.filter(entry => selectedIds.has(entry.id) && !entry.disabled);
       if (!pool.length) return '';
 
-      const selectedEntries = triggerOn
-        ? pool.filter(entry => isEntryActive(entry, text, overrides[entry.id]))
-        : pool; // 触发关闭：维持现状，全部已选条目注入
+      let selectedEntries;
+      if (triggerOn) {
+        const decided = pool.map(entry => {
+          const r = activationOf(entry, text, overrides[entry.id]);
+          return { entry, active: r.active, reason: r.reason };
+        });
+        selectedEntries = decided.filter(d => d.active).map(d => d.entry);
+        // 控制台命中明细：每轮推演打印哪些条目注入/跳过及原因（折叠分组，不刷屏）
+        try {
+          console.groupCollapsed(`[世界引擎] 世界书蓝绿灯：${selectedEntries.length}/${pool.length} 注入${text ? '' : '（扫描文本为空，仅常驻）'}`);
+          decided.forEach(d => console.log(`${d.active ? '✓ 注入' : '· 跳过'} | ${d.reason} | ${d.entry.world} / ${d.entry.title}`));
+          console.groupEnd();
+        } catch (e) {}
+      } else {
+        selectedEntries = pool; // 触发关闭：维持现状，全部已选条目注入
+      }
 
       if (!selectedEntries.length) return '';
 
@@ -264,6 +283,7 @@ ${content}`;
     buildPromptSection,
     triggerEnabled,
     isEntryActive,
+    activationOf,
     matchKey
   };
 })();
