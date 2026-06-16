@@ -20,7 +20,7 @@ window.WORLD_ENGINE_UI = (function() {
   let editingSecret = null;
   let listPagerCounter = 0;
   const listPageState = {};
-  const sectionCollapsed = { 'checkpoint-section': true };
+  const sectionCollapsed = { 'checkpoint-section': true, 'set-filter': true };
   const expandedWorldbookGroups = new Set();
   // 世界书缓存（模块级，跨 refresh() 存活）
   let _wbCachedEntries = null;
@@ -419,11 +419,6 @@ window.WORLD_ENGINE_UI = (function() {
     return '<div class="we-sub-topbar">'
       + '<button class="we-icon-btn" id="we-btn-back" title="返回"><i class="fa-solid fa-arrow-left"></i></button>'
       + '<span class="we-sub-title">设置</span>'
-      + '</div>'
-      + '<div class="we-settings-evolve-actions">'
-      + '<button class="we-btn we-btn-primary" id="we-btn-redo" title="把存档点喂给后台推演，重出本轮结果">重新推演</button>'
-      + '<button class="we-btn we-btn-primary" id="we-btn-forward" title="把当前状态喂给后台推演，向前推进一轮">向前推演</button>'
-      + '<button class="we-btn we-btn-danger" id="we-btn-abort" style="background:var(--we-danger);color:#fff;" disabled>停止推演</button>'
       + '</div>'
       + renderSettingsForm()
       + '<div class="we-section" style="margin-top:16px;"><div class="we-section-title">' + sectionHeader(checkpointTitle(checkpoint, cpLayer), 'checkpoint-section') + '</div>' + sectionBody('checkpoint-section', cpContent) + '</div>'
@@ -1283,9 +1278,16 @@ window.WORLD_ENGINE_UI = (function() {
     const settings = window.WORLD_ENGINE_API
       ? window.WORLD_ENGINE_API.getSettings(true)
       : JSON.parse(window.WORLD_ENGINE_STORE.getItem('world_engine_settings') || '{}');
-    const mode = settings.evolveMode === 'manual' ? 'manual' : 'auto';
+    const mode = (settings.evolveMode === 'manual' || settings.evolveMode === 'time') ? settings.evolveMode : 'auto';
     const everyX = Math.max(1, parseInt(settings.evolveEveryX) || 1);
     const readRounds = Math.min(everyX, Math.max(1, parseInt(settings.evolveReadRounds) || 1));
+    // 按时间模式的当前值
+    const _stForTime = core.hasState() ? core.loadState() : null;
+    const _cpForTime = core.restoreCheckpoint();
+    const stTimeVal = (_stForTime && _stForTime.time != null) ? _stForTime.time : '';
+    const cpTimeVal = (_cpForTime && _cpForTime.time != null) ? _cpForTime.time : '';
+    const lastDayVal = (core.getLastStoryDay && core.getLastStoryDay() != null) ? core.getLastStoryDay() : '';
+    const tv = (k, d) => (settings[k] != null && settings[k] !== '') ? settings[k] : d;
 
     const sec = (id, title, body) =>
       '<div class="we-section"><div class="we-section-title">' + sectionHeader(title, id) + '</div>' +
@@ -1317,19 +1319,72 @@ window.WORLD_ENGINE_UI = (function() {
       <div class="we-input-group">
         <label>推演模式</label>
         <select id="we-evolve-mode" style="width:100%;">
-          <option value="auto" ${mode === 'auto' ? 'selected' : ''}>自动（每 X 轮推演一次）</option>
+          <option value="auto" ${mode === 'auto' ? 'selected' : ''}>自动 · 按轮（每 X 轮推演一次）</option>
+          <option value="time" ${mode === 'time' ? 'selected' : ''}>自动 · 按时间（正文日期差够 N 天）</option>
           <option value="manual" ${mode === 'manual' ? 'selected' : ''}>手动（仅点「手动推演」才触发）</option>
         </select>
       </div>
-      <div class="we-input-group" id="we-evolve-everyx-group" style="${mode === 'manual' ? 'display:none;' : ''}">
+      <div class="we-input-group" id="we-evolve-everyx-group" style="${mode === 'auto' ? '' : 'display:none;'}">
         <label>每几轮推演一次（X）</label>
         <input type="number" id="we-evolve-everyx" min="1" step="1" value="${everyX}" style="width:100%;">
         <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">填 1 = 每轮推演；填 3 = 每向前 3 轮推演一次。重 roll 不计入轮数。</div>
       </div>
-      <div class="we-input-group" id="we-evolve-readrounds-group" style="${mode === 'manual' ? 'display:none;' : ''}">
+      <div class="we-input-group" id="we-evolve-readrounds-group" style="${mode === 'auto' ? '' : 'display:none;'}">
         <label>每次推演读取最近几轮对话（a）</label>
         <input type="number" id="we-evolve-readrounds" min="1" max="${everyX}" step="1" value="${readRounds}" style="width:100%;">
         <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">从当前层往前取 a 轮的「用户输入 + AI 输出」喂给后台推演。最小 1，最大不超过 X（每次推演的轮数）。默认 1 = 只读最新一轮。</div>
+      </div>
+      <div id="we-evolve-time-group" style="${mode === 'time' ? '' : 'display:none;'}">
+        <div class="we-input-group" style="display:flex;gap:6px;">
+          <div style="flex:1;"><label>取正文前 N 字</label><input type="number" id="we-time-front" min="0" step="1" value="${tv('evolveTimeFront', 0)}" style="width:100%;"></div>
+          <div style="flex:1;"><label>取正文后 N 字</label><input type="number" id="we-time-back" min="0" step="1" value="${tv('evolveTimeBack', 80)}" style="width:100%;"></div>
+        </div>
+        <div class="we-input-group">
+          <label>日期正则（6 框：1/3/5 抓数字 → 捕获组，2/4/6 单位）</label>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;">
+            <input type="text" id="we-time-re1" value="${u(tv('evolveTimeRe1',''))}" placeholder="框1 如 \\d+ 或 [一二三...]+" style="flex:1 1 30%;">
+            <input type="text" id="we-time-re2" value="${u(tv('evolveTimeRe2',''))}" placeholder="框2 单位 如 年" style="flex:1 1 18%;">
+            <input type="text" id="we-time-re3" value="${u(tv('evolveTimeRe3',''))}" placeholder="框3" style="flex:1 1 30%;">
+            <input type="text" id="we-time-re4" value="${u(tv('evolveTimeRe4',''))}" placeholder="框4 如 月" style="flex:1 1 18%;">
+            <input type="text" id="we-time-re5" value="${u(tv('evolveTimeRe5',''))}" placeholder="框5" style="flex:1 1 30%;">
+            <input type="text" id="we-time-re6" value="${u(tv('evolveTimeRe6',''))}" placeholder="框6 如 日/号" style="flex:1 1 18%;">
+          </div>
+          <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">某框留空即跳过。中文数字自动换算，多个日期取最后一个。</div>
+        </div>
+        <div class="we-input-group" style="display:flex;gap:6px;">
+          <div style="flex:1;"><label>乘数A（框1）</label><input type="number" id="we-time-mul1" step="any" value="${tv('evolveTimeMul1',360)}" style="width:100%;"></div>
+          <div style="flex:1;"><label>乘数B（框3）</label><input type="number" id="we-time-mul2" step="any" value="${tv('evolveTimeMul2',30)}" style="width:100%;"></div>
+          <div style="flex:1;"><label>乘数C（框5）</label><input type="number" id="we-time-mul3" step="any" value="${tv('evolveTimeMul3',1)}" style="width:100%;"></div>
+        </div>
+        <div class="we-input-group">
+          <label>满 N 天推演一次</label>
+          <input type="number" id="we-time-threshold" min="1" step="1" value="${tv('evolveTimeThreshold',1)}" style="width:100%;">
+        </div>
+        <div class="we-input-group">
+          <label>最多读取最近 X 轮对话</label>
+          <input type="number" id="we-time-maxrounds" min="1" step="1" value="${tv('evolveTimeMaxRounds',10)}" style="width:100%;">
+          <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">自上次推演以来跨了几轮就读几轮，超过 X 则只读最近 X 轮，封顶防止 prompt 过长。</div>
+        </div>
+        <div class="we-input-group" style="border-top:1px solid var(--we-border,#3a3a3a);padding-top:8px;">
+          <label>当前状态时间（总天数）</label>
+          <input type="number" id="we-time-state" step="any" value="${stTimeVal}" placeholder="state.time，空则不写" style="width:100%;">
+        </div>
+        <div class="we-input-group">
+          <label>存档点时间（总天数）</label>
+          <input type="number" id="we-time-checkpoint" step="any" value="${cpTimeVal}" placeholder="checkpoint.time，空则不写" style="width:100%;">
+        </div>
+        <div class="we-input-group">
+          <label>本轮对话时间（总天数）</label>
+          <input type="number" id="we-time-current" step="any" value="${lastDayVal}" placeholder="保存即判断是否推演" style="width:100%;">
+          <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">保存后：与基准时间相减，够 N 天则立即推演。三个时间框都只在有值时写入，写错可关闭插件重开重填。</div>
+        </div>
+      </div>`;
+
+    const filterBody = `
+      <div class="we-input-group">
+        <label>每行一条正则，匹配内容会在喂后台前删除</label>
+        <textarea id="we-filter-regex" rows="4" style="width:100%;resize:vertical;" placeholder="例如 &lt;think&gt;[\\s\\S]*?&lt;/think&gt;">${u(tv('evolveFilterRegex',''))}</textarea>
+        <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">对每条「用户/AI」文本逐行做 g 全局替换为空，再拼装喂后台推演。不影响聊天正文，也不影响日期抓取。</div>
       </div>`;
 
     const injectBody = `
@@ -1354,6 +1409,7 @@ window.WORLD_ENGINE_UI = (function() {
 
     return sec('set-api', 'API 配置', apiBody)
       + sec('set-evolve', '推演模式', evolveBody)
+      + sec('set-filter', '输入输出过滤器', filterBody)
       + sec('set-display', '界面显示', displayBody)
       + sec('set-inject', '正文注入', injectBody);
   }
@@ -1998,93 +2054,78 @@ window.WORLD_ENGINE_UI = (function() {
       };
     });
 
-    // 手动推演：两个按钮，显式指定基底，不看 isNewRound。
-    //   重新推演 → 喂存档点 B（mode 'redo'），面板显示存档点；
-    //   向前推演 → 喂当前状态 A（mode 'forward'），面板显示当前状态。
-    async function runManualEvolve(mode, scope) {
-      if (isEvolving) return;
-      // 后台已有推演（如自动推演）在跑：提示而非触发，避免 busy 被当成「推演失败」
-      if (evolution.isRunning?.()) {
-        if (window.__WE_SetExternalStatus) window.__WE_SetExternalStatus('已有推演进行中...');
-        showToast('已有推演进行中，请稍候');
-        return;
-      }
-      isEvolving = true;
-      setEvolvingUI(true, scope);
-      refresh(true); // 推演开始：立刻按基底翻面（重新推演→存档点 B / 向前推演→当前状态 A），等出新结果再翻
-      if (window.__WE_SetExternalStatus) window.__WE_SetExternalStatus('推演中...');
-      try {
-        const ctx = SillyTavern.getContext();
-        const s = core.loadState();
-        const chat = ctx?.chat || [];
-        const lastMsg = chat[chat.length - 1];
-        const userMsg = lastMsg?.is_user ? (lastMsg.mes || '') : '';
-        const aiMsg = !lastMsg?.is_user ? (lastMsg?.mes || '') : '';
-        const ok = await evolution.evolve(s, userMsg, aiMsg, { mode });
-        if (ok && window.WORLD_ENGINE_LEDGER) window.WORLD_ENGINE_LEDGER.recordChanges(s);
-        if (ok && window.WORLD_ENGINE?.applyInjection) window.WORLD_ENGINE.applyInjection();
-        if (window.__WE_SetExternalStatus) window.__WE_SetExternalStatus(ok ? '推演完成' : '推演失败', !ok);
-        if (ok) showToast('推演完成');
-      } catch(e) {
-        if (window.__WE_SetExternalStatus) window.__WE_SetExternalStatus('推演失败: ' + e.message, true);
-        showToast('' + e.message, true);
-      }
-      isEvolving = false;
-      setEvolvingUI(false);
-      refresh();
-    }
-
-    const redoBtn = document.getElementById('we-btn-redo');
-    const forwardBtn = document.getElementById('we-btn-forward');
-    if (redoBtn) redoBtn.onclick = () => runManualEvolve('redo', 'checkpoint');
-    if (forwardBtn) forwardBtn.onclick = () => runManualEvolve('forward', 'state');
-
-    const abortBtn = document.getElementById('we-btn-abort');
-    if (abortBtn) {
-      abortBtn.onclick = () => {
-        evolution.abort();
-        showToast('已发送停止信号');
-      };
-    }
-    if (redoBtn || forwardBtn) {
-      setEvolvingUI(isEvolving || Boolean(evolution.isRunning?.()));
-    }
-
     const refreshBtn = document.getElementById('we-btn-refresh');
     if (refreshBtn) refreshBtn.onclick = () => refresh();
 
     const saveBtn = document.getElementById('we-save-settings');
     if (saveBtn) {
       saveBtn.onclick = () => {
+        const _modeRaw = document.getElementById('we-evolve-mode')?.value;
+        const gv = id => document.getElementById(id)?.value;
         const ns = {
           ...(window.WORLD_ENGINE_API ? window.WORLD_ENGINE_API.getSettings(true) : {}),
           apiUrl: document.getElementById('we-api-url')?.value || '',
           apiKey: document.getElementById('we-api-key')?.value || '',
           model: document.getElementById('we-model')?.value || 'gpt-3.5-turbo',
           injectIntoPrompt: document.getElementById('we-inject-into-prompt')?.checked !== false,
-          evolveMode: document.getElementById('we-evolve-mode')?.value === 'manual' ? 'manual' : 'auto',
+          evolveMode: (_modeRaw === 'manual' || _modeRaw === 'time') ? _modeRaw : 'auto',
           evolveEveryX: Math.max(1, parseInt(document.getElementById('we-evolve-everyx')?.value) || 1),
           evolveReadRounds: Math.max(1, parseInt(document.getElementById('we-evolve-readrounds')?.value) || 1),
-          displayMode: document.getElementById('we-display-mode')?.value === 'expand' ? 'expand' : 'mask'
+          evolveFilterRegex: gv('we-filter-regex') || '',
+          displayMode: document.getElementById('we-display-mode')?.value === 'expand' ? 'expand' : 'mask',
+          // 按时间模式
+          evolveTimeFront: Math.max(0, parseInt(gv('we-time-front')) || 0),
+          evolveTimeBack: Math.max(0, parseInt(gv('we-time-back')) || 0),
+          evolveTimeRe1: gv('we-time-re1') || '', evolveTimeRe2: gv('we-time-re2') || '',
+          evolveTimeRe3: gv('we-time-re3') || '', evolveTimeRe4: gv('we-time-re4') || '',
+          evolveTimeRe5: gv('we-time-re5') || '', evolveTimeRe6: gv('we-time-re6') || '',
+          evolveTimeMul1: parseFloat(gv('we-time-mul1')) || 0,
+          evolveTimeMul2: parseFloat(gv('we-time-mul2')) || 0,
+          evolveTimeMul3: parseFloat(gv('we-time-mul3')) || 0,
+          evolveTimeThreshold: Math.max(1, parseInt(gv('we-time-threshold')) || 1),
+          evolveTimeMaxRounds: Math.max(1, parseInt(gv('we-time-maxrounds')) || 10)
         };
         // a 不得超过 X（每次推演的轮数）
         ns.evolveReadRounds = Math.min(ns.evolveReadRounds, ns.evolveEveryX);
         window.WORLD_ENGINE_STORE.setItem('world_engine_settings', JSON.stringify(ns));
         if (window.WORLD_ENGINE_API) window.WORLD_ENGINE_API.getSettings(true);
+
+        // 按时间模式：三个时间框「有值才写」，本轮对话时间写入后触发判断
+        if (ns.evolveMode === 'time') {
+          const stIn = gv('we-time-state');
+          if (stIn != null && stIn !== '') {
+            const s2 = core.loadState();
+            if (s2) { s2.time = Number(stIn); core.saveState(s2); }
+          }
+          const cpIn = gv('we-time-checkpoint');
+          if (cpIn != null && cpIn !== '') {
+            const cp2 = core.restoreCheckpoint();
+            if (cp2) { cp2.time = Number(cpIn); core.saveCheckpoint(cp2); }
+          }
+          const curIn = gv('we-time-current');
+          if (curIn != null && curIn !== '') {
+            window.WORLD_ENGINE?.manualTimeEvolve?.(Number(curIn));
+          }
+        }
+
         window.WORLD_ENGINE?.applyInjection?.();
         showToast('设置已保存');
       };
     }
 
-    // 推演模式切换：手动时隐藏 X 输入
+    // 推演模式切换：按轮显示 X/a，按时间显示时间组，手动都隐藏
     const evolveModeSel = document.getElementById('we-evolve-mode');
     if (evolveModeSel) {
       evolveModeSel.onchange = () => {
-        const hidden = evolveModeSel.value === 'manual' ? 'none' : '';
-        const group = document.getElementById('we-evolve-everyx-group');
-        if (group) group.style.display = hidden;
-        const rgroup = document.getElementById('we-evolve-readrounds-group');
-        if (rgroup) rgroup.style.display = hidden;
+        const v = evolveModeSel.value;
+        const roundShow = v === 'auto' ? '' : 'none';
+        const timeShow = v === 'time' ? '' : 'none';
+        const g1 = document.getElementById('we-evolve-everyx-group');
+        if (g1) g1.style.display = roundShow;
+        const g2 = document.getElementById('we-evolve-readrounds-group');
+        if (g2) g2.style.display = roundShow;
+        const g3 = document.getElementById('we-evolve-time-group');
+        if (g3) g3.style.display = timeShow;
       };
     }
 
@@ -2735,12 +2776,13 @@ window.WORLD_ENGINE_UI = (function() {
     // 显示哪份由 getActiveInjected 守卫 + _evolvingScope 负责，刷新由调用方在外面做。
     _evolving = !!active;
     if (active && scope) _evolvingScope = scope;
-    const abortBtn = document.getElementById('we-btn-abort');
-    if (abortBtn) abortBtn.disabled = !active;
-    ['we-btn-redo', 'we-btn-forward'].forEach(id => {
-      const b = document.getElementById(id);
-      if (b) b.disabled = active;
-    });
+    // 悬浮球卫星按钮：推演中禁用 前进/重新、启用 停止；空闲反之
+    const fwd = document.getElementById('we-sat-forward');
+    const redo = document.getElementById('we-sat-redo');
+    const ab = document.getElementById('we-sat-abort');
+    if (fwd) fwd.classList.toggle('we-sat-off', !!active);
+    if (redo) redo.classList.toggle('we-sat-off', !!active);
+    if (ab) ab.classList.toggle('we-sat-off', !active);
     const ball = document.getElementById('we-input-btn');
     if (ball && active) {
       ball.classList.add('we-ball-evolving');
@@ -2752,6 +2794,62 @@ window.WORLD_ENGINE_UI = (function() {
 
   function setInjectedScope(scope) {
     _injectedScope = scope === 'checkpoint' ? 'checkpoint' : 'state';
+  }
+
+  // 手动推演（供悬浮球卫星按钮调用）：显式指定基底，不看 isNewRound。
+  //   重新推进 → 喂存档点 B（mode 'redo'），面板显示存档点；
+  //   向前推进 → 喂当前状态 A（mode 'forward'），面板显示当前状态。
+  async function runManualEvolve(mode, scope) {
+    if (isEvolving) return;
+    if (evolution.isRunning?.()) {
+      if (window.__WE_SetExternalStatus) window.__WE_SetExternalStatus('已有推演进行中...');
+      showToast('已有推演进行中，请稍候');
+      return;
+    }
+    isEvolving = true;
+    setEvolvingUI(true, scope);
+    refresh(true);
+    if (window.__WE_SetExternalStatus) window.__WE_SetExternalStatus('推演中...');
+    try {
+      const ctx = SillyTavern.getContext();
+      const s = core.loadState();
+      const chat = ctx?.chat || [];
+      const lastMsg = chat[chat.length - 1];
+      const userMsg = lastMsg?.is_user ? (lastMsg.mes || '') : '';
+      const aiMsg = !lastMsg?.is_user ? (lastMsg?.mes || '') : '';
+      // 读取轮数：手动/时间模式 → min(自上次推演经过轮数, 上限X)；按轮模式 → a（≤X）。start 做负数保护。
+      const st = window.WORLD_ENGINE_API ? window.WORLD_ENGINE_API.getSettings(true) : {};
+      let rounds;
+      if (st.evolveMode === 'manual' || st.evolveMode === 'time') {
+        const Xmax = Math.max(1, parseInt(st.evolveTimeMaxRounds) || 10);
+        const cpp = core.restoreCheckpoint();
+        const L = core.getChatLayer();
+        let anchorL = (cpp && cpp.chatLayer != null) ? Number(cpp.chatLayer)
+                    : (s && s.chatLayer != null ? Number(s.chatLayer) : L);
+        if (!Number.isFinite(anchorL)) anchorL = L;
+        const since = Math.floor(Math.max(0, L - anchorL) / 2);
+        rounds = Math.max(1, Math.min(since, Xmax));
+      } else {
+        const everyX = Math.max(1, parseInt(st.evolveEveryX) || 1);
+        rounds = Math.min(everyX, Math.max(1, parseInt(st.evolveReadRounds) || 1));
+      }
+      const start = Math.max(0, chat.length - rounds * 2);
+      const dialogueText = chat.slice(start)
+        .map(m => (m.is_user ? '用户' : 'AI') + '：' + core.filterDialogue((m.mes || '').trim(), st))
+        .filter(line => line.length > 3)
+        .join('\n');
+      const ok = await evolution.evolve(s, userMsg, aiMsg, { mode, dialogueText });
+      if (ok && window.WORLD_ENGINE_LEDGER) window.WORLD_ENGINE_LEDGER.recordChanges(s);
+      if (ok && window.WORLD_ENGINE?.applyInjection) window.WORLD_ENGINE.applyInjection();
+      if (window.__WE_SetExternalStatus) window.__WE_SetExternalStatus(ok ? '推演完成' : '推演失败', !ok);
+      if (ok) showToast('推演完成');
+    } catch(e) {
+      if (window.__WE_SetExternalStatus) window.__WE_SetExternalStatus('推演失败: ' + e.message, true);
+      showToast('' + e.message, true);
+    }
+    isEvolving = false;
+    setEvolvingUI(false);
+    refresh();
   }
 
   // ========== 世界引擎悬浮球 ==========
@@ -2806,7 +2904,7 @@ window.WORLD_ENGINE_UI = (function() {
     const vw = window.innerWidth, vh = window.innerHeight;
     const size = ball.offsetWidth || 52;
     let pos = loadBallPos();
-    if (!pos) pos = { left: vw - size - 18, top: vh - size - 90 };
+    if (!pos) pos = { left: vw - size - 44, top: vh - size - 90 };
     // 钳制进可视区域，避免拖出屏幕后找不到
     pos.left = Math.max(4, Math.min(pos.left, vw - size - 4));
     pos.top = Math.max(4, Math.min(pos.top, vh - size - 4));
@@ -2897,10 +2995,9 @@ window.WORLD_ENGINE_UI = (function() {
   function setBallState(text, isError) {
     const ball = document.getElementById('we-input-btn');
     if (!ball) return;
-    const tip = ball.querySelector('.we-ball-tip');
     const ring = ball.querySelector('.we-ball-ring');
     const badge = ball.querySelector('.we-ball-badge');
-    if (tip) tip.textContent = text || '';
+    // 悬浮球不显示状态文字（文字走屏幕顶部横幅）
 
     ball.classList.remove('we-ball-evolving', 'we-ball-success', 'we-ball-fail');
     clearTimeout(_ballStatusTimer);
@@ -2944,8 +3041,42 @@ window.WORLD_ENGINE_UI = (function() {
     ball.classList.remove('we-ball-success', 'we-ball-fail');
     const badge = ball.querySelector('.we-ball-badge');
     if (badge) badge.textContent = '';
-    const tip = ball.querySelector('.we-ball-tip');
-    if (tip) tip.textContent = '';
+  }
+
+  // 屏幕正上方状态横幅：显示约 5s 后淡出
+  let _topStatusTimer = null;
+  function showTopStatus(text, isError) {
+    if (!document.body || !text) return;
+    let el = document.getElementById('we-top-status');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'we-top-status';
+      document.body.appendChild(el);
+    }
+    el.textContent = text;
+    el.classList.toggle('we-top-status-error', !!isError);
+    el.classList.add('show');
+    clearTimeout(_topStatusTimer);
+    _topStatusTimer = setTimeout(() => { el.classList.remove('show'); }, 5000);
+  }
+
+  // 给悬浮球的三颗卫星按钮绑事件；阻止冒泡，避免触发拖拽 / 打开面板
+  function wireSatellites(ball) {
+    const wire = (id, fn) => {
+      const el = ball.querySelector('#' + id);
+      if (!el) return;
+      const stop = e => e.stopPropagation();
+      el.addEventListener('mousedown', stop);
+      el.addEventListener('touchstart', stop, { passive: true });
+      el.addEventListener('click', (e) => {
+        e.stopPropagation(); e.preventDefault();
+        if (el.classList.contains('we-sat-off')) return;
+        fn();
+      });
+    };
+    wire('we-sat-forward', () => runManualEvolve('forward', 'state'));
+    wire('we-sat-redo', () => runManualEvolve('redo', 'checkpoint'));
+    wire('we-sat-abort', () => { evolution.abort(); showToast('已发送停止信号'); });
   }
 
   function buildInputButton() {
@@ -2960,16 +3091,22 @@ window.WORLD_ENGINE_UI = (function() {
       btn.setAttribute('aria-label', '世界引擎');
       btn.className = 'we-ball';
       btn.innerHTML =
+        '<span class="we-ball-orbit"></span>' +
         '<span class="we-ball-ring"></span>' +
         '<span class="we-ball-globe"></span>' +
         '<span class="we-ball-count"></span>' +
         '<span class="we-ball-badge"></span>' +
-        '<span class="we-ball-tip"></span>';
+        '<span class="we-ball-tip"></span>' +
+        '<span class="we-sat we-sat-up" id="we-sat-forward" role="button" title="向前推进"><i class="fa-solid fa-forward"></i></span>' +
+        '<span class="we-sat we-sat-right we-sat-off" id="we-sat-abort" role="button" title="停止推演"><i class="fa-solid fa-stop"></i></span>' +
+        '<span class="we-sat we-sat-down" id="we-sat-redo" role="button" title="重新推进"><i class="fa-solid fa-rotate-right"></i></span>';
       btn.onclick = () => togglePanel();
       document.body.appendChild(btn);
+      wireSatellites(btn);
       applyBallPos(btn);
       makeBallDraggable(btn);
       window.addEventListener('resize', () => applyBallPos(btn));
+      setEvolvingUI(isEvolving || Boolean(evolution.isRunning?.()));
     } else if (btn.parentElement !== document.body) {
       document.body.appendChild(btn);
       applyBallPos(btn);
@@ -2988,6 +3125,10 @@ window.WORLD_ENGINE_UI = (function() {
       const el = document.getElementById('we-external-status');
       if (el) el.textContent = text;
       setBallState(text || '', !!isError);
+      // 进度类（第 N/X 轮/天）只在悬浮球上显示；其余状态走屏幕顶部横幅
+      if (text && !/第\s*\d+\s*\/\s*\d+\s*[轮天]/.test(text)) {
+        showTopStatus(text, !!isError);
+      }
     };
 
     buildPanel();
