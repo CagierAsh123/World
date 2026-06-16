@@ -2849,3 +2849,42 @@
 .we-card-active .we-secret-ops { display: flex !important; }
 /* 可点开的卡片给一点点提示 */
 .we-card-active { box-shadow: inset 0 0 0 1px var(--we-border); }
+
+/* ===== 酒馆缓存与存档 ===== */
+.we-chatcache-list {
+  max-height: 280px;
+  overflow-y: auto;
+  border: 1px solid var(--we-border);
+  border-radius: 6px;
+  background: var(--we-bg);
+}
+.we-snapshot-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+}
+.we-snapshot-row + .we-snapshot-row { border-top: 1px solid var(--we-border); }
+.we-snapshot-row:hover { background: var(--we-bg2); }
+.we-snapshot-main { flex: 1; min-width: 0; }
+.we-snapshot-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--we-text);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.we-snapshot-meta { color: var(--we-text3); font-size: 11px; margin-top: 2px; }
+.we-snapshot-badge {
+  flex-shrink: 0;
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid var(--we-accent);
+  color: var(--we-accent);
+}
+.we-snapshot-badge.is-auto { border-color: var(--we-text3); color: var(--we-text3); }
+.we-snapshot-actions { display: flex; gap: 2px; flex-shrink: 0; }

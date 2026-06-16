@@ -9,6 +9,7 @@
     'world-engine-api.js',
     'world-engine-rules-loader.js',
     'world-engine-worldbook.js',
+    'world-engine-chatcache.js',
     'world-engine-ledger.js',
     'world-engine-evolution.js',
     'world-engine-inject.js',
@@ -49,6 +50,11 @@
       // 先把存储灌入内存镜像（并迁移旧 localStorage 存档），之后所有同步读写才有数据
       if (window.WORLD_ENGINE_STORE) {
         await window.WORLD_ENGINE_STORE.hydrate();
+      }
+
+      // 酒馆缓存：装好同步槽并对当前聊天做一次恢复/收敛（须在首次注入正文之前，注入才用上同步到的状态）
+      if (window.WORLD_ENGINE_CHATCACHE) {
+        window.WORLD_ENGINE_CHATCACHE.init();
       }
 
       const core = window.WORLD_ENGINE_CORE;
@@ -416,6 +422,10 @@
 
       async function onChatLoaded() {
         clearAutoEvolveTimer();
+        // 酒馆缓存：切聊天时先做实时同步的恢复/收敛（须在读取本地状态之前，本地才拿到云端较新存档）
+        if (window.WORLD_ENGINE_CHATCACHE) {
+          try { window.WORLD_ENGINE_CHATCACHE.onChatLoaded(); } catch (e) { console.warn('[世界引擎] 酒馆缓存恢复失败', e); }
+        }
         const ctx = SillyTavern.getContext();
         const chat = ctx?.chat || [];
         const currentLayer = core.getChatLayer();

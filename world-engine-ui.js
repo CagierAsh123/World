@@ -1407,10 +1407,36 @@ window.WORLD_ENGINE_UI = (function() {
         <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">展开模式下世界摘要下方直接平铺全部 section，无需进分页。</div>
       </div>`;
 
+    // 酒馆缓存与存档：存进当前聊天的 chat_metadata（随聊天文件保存到酒馆服务器，跨设备同步）。
+    // 列表与状态在 bindEvents → setupChatcacheSection() 里动态填充。
+    const chatcacheBody = `
+      <div class="we-input-group">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+          <input type="checkbox" id="we-sync-to-chat" ${settings.syncToChat === true ? 'checked' : ''}>
+          跨设备实时同步（存进当前聊天）
+        </label>
+        <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">开启后，本聊天的世界状态会持续写入酒馆聊天文件并随之跨设备同步；换设备打开同一聊天即可续上进度（冲突时较新版本胜出）。<b>不会</b>同步 API Key 等全局设置。</div>
+      </div>
+      <div class="we-input-group">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+          <input type="checkbox" id="we-auto-backup" ${settings.autoBackup === true ? 'checked' : ''}>
+          自动滚动备份（每当轮次推进存一条，保留最近 ${'3'} 条）
+        </label>
+        <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">防误删误改。自动备份与命名存档都保存在本聊天里，跨设备可见。</div>
+      </div>
+      <div class="we-hint" id="we-chatcache-status" style="margin:4px 0;"></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0;">
+        <button class="we-btn we-btn-primary" id="we-chatcache-save">新建命名存档</button>
+        <button class="we-btn" id="we-chatcache-import">导入存档</button>
+        <input type="file" id="we-chatcache-import-file" accept=".json" style="display:none;">
+      </div>
+      <div class="we-chatcache-list" id="we-chatcache-snapshots"><div class="we-empty">暂无存档</div></div>`;
+
     return sec('set-api', 'API 配置', apiBody)
       + sec('set-evolve', '推演模式', evolveBody)
       + sec('set-filter', '输入输出过滤器', filterBody)
       + sec('set-display', '界面显示', displayBody)
+      + sec('set-chatcache', '酒馆缓存与存档', chatcacheBody)
       + sec('set-inject', '正文注入', injectBody);
   }
 
@@ -2068,6 +2094,8 @@ window.WORLD_ENGINE_UI = (function() {
           apiKey: document.getElementById('we-api-key')?.value || '',
           model: document.getElementById('we-model')?.value || 'gpt-3.5-turbo',
           injectIntoPrompt: document.getElementById('we-inject-into-prompt')?.checked !== false,
+          syncToChat: document.getElementById('we-sync-to-chat')?.checked === true,
+          autoBackup: document.getElementById('we-auto-backup')?.checked === true,
           evolveMode: (_modeRaw === 'manual' || _modeRaw === 'time') ? _modeRaw : 'auto',
           evolveEveryX: Math.max(1, parseInt(document.getElementById('we-evolve-everyx')?.value) || 1),
           evolveReadRounds: Math.max(1, parseInt(document.getElementById('we-evolve-readrounds')?.value) || 1),
@@ -2514,6 +2542,122 @@ window.WORLD_ENGINE_UI = (function() {
         showToast('附加提示词已清除');
       };
     }
+
+    // ===== 酒馆缓存与存档 =====
+    (function setupChatcacheSection() {
+      const cc = window.WORLD_ENGINE_CHATCACHE;
+      const listEl = document.getElementById('we-chatcache-snapshots');
+      if (!cc || !listEl) return; // 不在设置页或模块缺失
+
+      const statusEl = document.getElementById('we-chatcache-status');
+      const fmtTime = (ms) => {
+        if (!ms) return '';
+        const d = new Date(ms), p = n => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+      };
+
+      function render() {
+        const st = cc.getStatus();
+        if (statusEl) {
+          if (!st.usable) statusEl.textContent = '当前没有可用聊天（请先打开一个角色/群聊）。';
+          else if (!st.apiAvailable) statusEl.textContent = '当前酒馆版本不支持写入 chat_metadata，酒馆缓存不可用。';
+          else statusEl.textContent = `实时同步${st.syncEnabled ? '已开启' : '已关闭'} · 本地修订 ${st.localRev} / 云端 ${st.liveRev} · 共 ${st.snapshotCount} 条存档`;
+        }
+        const snaps = cc.listSnapshots();
+        if (!snaps.length) { listEl.innerHTML = '<div class="we-empty">暂无存档</div>'; return; }
+        listEl.innerHTML = snaps.map(s => `
+          <div class="we-snapshot-row" data-snap-id="${u(s.id)}">
+            <div class="we-snapshot-main">
+              <div class="we-snapshot-name"><span class="we-snapshot-badge${s.auto ? ' is-auto' : ''}">${s.auto ? '自动' : '手动'}</span>${u(s.name)}</div>
+              <div class="we-snapshot-meta">第 ${s.round || 0} 轮 · ${fmtTime(s.createdAt)}</div>
+            </div>
+            <div class="we-snapshot-actions">
+              <button class="we-icon-btn" data-snap-action="restore" title="恢复到当前聊天"><i class="fa-solid fa-rotate-left"></i></button>
+              <button class="we-icon-btn" data-snap-action="rename" title="重命名"><i class="fa-solid fa-pen"></i></button>
+              <button class="we-icon-btn" data-snap-action="export" title="导出 JSON"><i class="fa-solid fa-download"></i></button>
+              <button class="we-icon-btn" data-snap-action="delete" title="删除"><i class="fa-solid fa-trash"></i></button>
+            </div>
+          </div>`).join('');
+        listEl.querySelectorAll('[data-snap-action]').forEach(btn => {
+          btn.onclick = () => {
+            const row = btn.closest('.we-snapshot-row');
+            const id = row && row.dataset.snapId;
+            if (!id) return;
+            const action = btn.dataset.snapAction;
+            const snap = cc.listSnapshots().find(s => s.id === id);
+            if (action === 'restore') {
+              if (!confirm(`恢复存档「${snap ? snap.name : id}」到当前聊天？\n当前状态会先自动备份，可再恢复回来。`)) return;
+              if (cc.restoreSnapshot(id)) { showToast('已恢复存档'); refresh(); }
+              else showToast('恢复失败', true);
+            } else if (action === 'rename') {
+              const name = prompt('新的存档名称：', snap ? snap.name : '');
+              if (name == null) return;
+              if (cc.renameSnapshot(id, name)) { showToast('已重命名'); render(); }
+            } else if (action === 'export') {
+              const obj = cc.exportSnapshot(id);
+              if (!obj) { showToast('导出失败', true); return; }
+              const safe = String(obj.name || id).replace(/[^\w一-龥-]+/g, '_');
+              setupDownload(JSON.stringify(obj, null, 2), 'we-snapshot-' + safe + '-' + Date.now() + '.json');
+              showToast('已导出存档');
+            } else if (action === 'delete') {
+              if (!confirm(`删除存档「${snap ? snap.name : id}」？不可恢复。`)) return;
+              if (cc.deleteSnapshot(id)) { showToast('已删除'); render(); }
+            }
+          };
+        });
+      }
+
+      // 立即生效并持久化单个开关（与 saveTonePrompt 同模式）
+      const persist = (key, val) => {
+        const wapi = window.WORLD_ENGINE_API;
+        const cur = wapi && wapi.getSettings ? wapi.getSettings(true) : {};
+        window.WORLD_ENGINE_STORE.setItem('world_engine_settings', JSON.stringify({ ...cur, [key]: val }));
+        if (wapi && wapi.getSettings) wapi.getSettings(true);
+      };
+
+      const syncBox = document.getElementById('we-sync-to-chat');
+      if (syncBox) syncBox.onchange = () => {
+        persist('syncToChat', syncBox.checked);
+        if (syncBox.checked && cc.pushLiveNow) cc.pushLiveNow(); // 开启即把本地播种进聊天
+        showToast(syncBox.checked ? '已开启跨设备同步' : '已关闭跨设备同步');
+        render();
+      };
+      const autoBox = document.getElementById('we-auto-backup');
+      if (autoBox) autoBox.onchange = () => {
+        persist('autoBackup', autoBox.checked);
+        showToast(autoBox.checked ? '已开启自动备份' : '已关闭自动备份');
+      };
+
+      const ccSaveBtn = document.getElementById('we-chatcache-save');
+      if (ccSaveBtn) ccSaveBtn.onclick = () => {
+        const name = prompt('给这份存档起个名字：', '存档 ' + fmtTime(Date.now()));
+        if (name == null) return;
+        if (cc.createSnapshot(name)) { showToast('已存档'); render(); }
+        else showToast('存档失败（当前聊天无世界数据或不可写）', true);
+      };
+
+      const ccImportBtn = document.getElementById('we-chatcache-import');
+      const ccImportFile = document.getElementById('we-chatcache-import-file');
+      if (ccImportBtn && ccImportFile) {
+        ccImportBtn.onclick = () => ccImportFile.click();
+        ccImportFile.onchange = (e) => {
+          const file = e.target.files[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+            try {
+              const obj = JSON.parse(ev.target.result);
+              if (cc.importSnapshot(obj)) { showToast('已导入存档'); render(); }
+              else showToast('不是有效的存档文件', true);
+            } catch (err) { showToast('解析失败: ' + err.message, true); }
+          };
+          reader.readAsText(file);
+          ccImportFile.value = '';
+        };
+      }
+
+      render();
+    })();
 
     // 调试区导出按钮
     function setupDownload(content, filename) {

@@ -11,6 +11,16 @@ window.WORLD_ENGINE_STORE = (function() {
   let ready = false;
   const mirror = new Map(); // key -> string value（内存镜像，支持同步读）
 
+  // 写入回调（同步槽）：每次 setItem/removeItem 后通知订阅者。
+  // 酒馆缓存模块（world-engine-chatcache.js）借此把按聊天隔离的存档镜像进 chat_metadata，
+  // 实现跨设备同步；其他模块无需改动。hydrate() 直接写 mirror，不经过这里，故灌入镜像时不会回弹。
+  let syncSink = null;
+  function setSyncSink(sink) { syncSink = sink; }
+  function notifySink(method, key, value) {
+    if (!syncSink || typeof syncSink[method] !== 'function') return;
+    try { syncSink[method](key, value); } catch (e) { /* 同步失败不得影响本地写入 */ }
+  }
+
   function openDB() {
     return new Promise((resolve, reject) => {
       let req;
@@ -92,12 +102,14 @@ window.WORLD_ENGINE_STORE = (function() {
     mirror.set(key, value);
     if (db) idbPut(key, value);
     else localStorage.setItem(key, value); // IDB 不可用时退回 localStorage（可能抛配额错误）
+    notifySink('onWrite', key, value);
   }
 
   function removeItem(key) {
     mirror.delete(key);
     if (db) idbDel(key);
     else { try { localStorage.removeItem(key); } catch (e) {} }
+    notifySink('onRemove', key, null);
   }
 
   // 返回镜像中所有 key（替代 localStorage.length / localStorage.key(i)）
@@ -108,5 +120,5 @@ window.WORLD_ENGINE_STORE = (function() {
     return out;
   }
 
-  return { hydrate, getItem, setItem, removeItem, keys };
+  return { hydrate, getItem, setItem, removeItem, keys, setSyncSink };
 })();
