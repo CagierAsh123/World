@@ -1416,6 +1416,7 @@ window.WORLD_ENGINE_UI = (function() {
   }
 
   function renderSettingsAfterCheckpoint() {
+    const settings = (window.WORLD_ENGINE_API && window.WORLD_ENGINE_API.getSettings) ? window.WORLD_ENGINE_API.getSettings() : {};
     const sec = (id, title, body) =>
       '<div class="we-section"><div class="we-section-title">' + sectionHeader(title, id) + '</div>' +
       sectionBody(id, body) + '</div>';
