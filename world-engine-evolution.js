@@ -612,7 +612,9 @@ type：${picked.type}
   async function callEvolutionAPI(state, userMsg, aiMsg, extraInstruction = '', dialogueText = '') {
     const rulesLoader = window.WORLD_ENGINE_RULES;
     const fullRules = rulesLoader ? rulesLoader.getAllRulesText() : '【规则加载失败】';
-    const worldbookSection = await window.WORLD_ENGINE_WORLDBOOK?.buildPromptSection?.() || '';
+    // 蓝绿灯触发：扫描本扩展自己喂给推演的近期对话（解耦，不读酒馆的聊天扫描）
+    const worldbookScanText = dialogueText || `${userMsg || ''}\n${aiMsg || ''}`;
+    const worldbookSection = await window.WORLD_ENGINE_WORLDBOOK?.buildPromptSection?.(worldbookScanText) || '';
     const tonePrompt = ((api.getSettings ? api.getSettings() : {}).tonePrompt || '').trim();
     const toneSection = tonePrompt
       ? `\n\n========== 附加提示词（用户自定义 · 优先遵守 · 但不得违反上述输出 JSON 格式）==========\n${tonePrompt}`
@@ -694,6 +696,8 @@ ${extraInstruction ? '\n' + extraInstruction : ''}${toneSection}`;
 
   let _abortController = null;
   let _isRunning = false;
+  let _backfillRunning = false;
+  let _backfillAborted = false;
 
   async function evolve(state, userMsg, aiMsg, opts) {
     if (_isRunning) {
@@ -941,6 +945,10 @@ ${extraInstruction ? '\n' + extraInstruction : ''}${toneSection}`;
   }
 
   function abort() {
+    if (_backfillRunning) {
+      _backfillAborted = true;
+      console.log('[世界引擎] 🛑 收到批量回填中止请求');
+    }
     if (_abortController) {
       _abortController.abort();
       console.log('[世界引擎] 🛑 发出中止信号');
@@ -948,16 +956,148 @@ ${extraInstruction ? '\n' + extraInstruction : ''}${toneSection}`;
   }
 
   function isRunning() {
-    return _isRunning;
+    return _isRunning || _backfillRunning;
+  }
+
+  // ========== 批量「重填世界推演」 ==========
+  // 从第 1 个 AI 楼层开始，分批把世界状态重新推演到指定楼层（清空重来）。
+  // 每批仅喂本批 N 个 AI 楼层（及夹在中间的 user 楼层）的对话，但 state 逐批累积——
+  // 第 k 批在第 k-1 批的推演结果之上继续，保证世界连贯；token 每批恒定可控。
+  // opts: { batchSize, retries, endLayer, onProgress }
+  //   onProgress({ phase, batch, totalBatches, layerFrom, layerTo, attempt, ok, round })
+  // 返回 { done, totalBatches, completedBatches, failedAt }
+  async function backfillEvolve(opts) {
+    opts = opts || {};
+    if (_isRunning || _backfillRunning) {
+      console.warn('[世界引擎] ⚠️ 已有推演/回填进行中，跳过批量回填');
+      return { done: false, reason: 'busy' };
+    }
+
+    const settings = api && api.getSettings ? api.getSettings(true) : {};
+    const batchSize = Math.max(1, parseInt(opts.batchSize ?? settings.backfillBatchSize) || 1);
+    const retries = Math.max(0, parseInt(opts.retries ?? settings.backfillRetries) || 0);
+    const onProgress = typeof opts.onProgress === 'function' ? opts.onProgress : () => {};
+
+    // 1) 收集所有有效 AI 楼层在 chat 中的下标（与自动推演判据一致：非 user、mes 非空）
+    let chat = [];
+    try {
+      const ctx = SillyTavern.getContext();
+      chat = (ctx && ctx.chat) || [];
+    } catch (e) { chat = []; }
+    const aiIdx = [];
+    for (let i = 0; i < chat.length; i++) {
+      const m = chat[i];
+      if (m && !m.is_user && String(m.mes || '').trim()) aiIdx.push(i);
+    }
+    if (!aiIdx.length) {
+      return { done: false, reason: 'no-ai-layers', totalBatches: 0 };
+    }
+
+    // 2) 结束楼层夹紧（0 或缺省 = 推到最后一个 AI 楼层）
+    let endLayer = parseInt(opts.endLayer ?? settings.backfillEndLayer) || 0;
+    if (!Number.isFinite(endLayer) || endLayer <= 0 || endLayer > aiIdx.length) endLayer = aiIdx.length;
+
+    // 3) 切批：前 endLayer 个 AI 楼层按 batchSize 分组，最后一批吸收余数（不产生空批）
+    const batches = [];
+    for (let p = 0; p < endLayer; p += batchSize) {
+      const pEnd = Math.min(p + batchSize, endLayer) - 1; // 含
+      // 余数并入上一批：若剩余不足一批且已有批，则把它并进最后一批
+      batches.push({ pStart: p, pEnd });
+    }
+    // 合并末尾零头到上一批（如 30/7 → 7/7/7/9 而非 7/7/7/7/2）
+    if (batches.length >= 2) {
+      const last = batches[batches.length - 1];
+      const lastCount = last.pEnd - last.pStart + 1;
+      if (lastCount < batchSize) {
+        batches[batches.length - 2].pEnd = last.pEnd;
+        batches.pop();
+      }
+    }
+    const totalBatches = batches.length;
+
+    // 4) 清空重来：丢弃当前世界状态与存档点，让第 1 批从空白世界起推
+    core.clearState();
+    core.clearCheckpoint();
+
+    _backfillRunning = true;
+    _backfillAborted = false;
+    let completedBatches = 0;
+
+    try {
+      for (let b = 0; b < totalBatches; b++) {
+        if (_backfillAborted) {
+          console.log('[世界引擎] 🛑 批量回填已中止，停在第', b, '/', totalBatches, '批');
+          return { done: false, reason: 'aborted', totalBatches, completedBatches, failedAt: b + 1 };
+        }
+        const { pStart, pEnd } = batches[b];
+        const lastChatIdx = aiIdx[pEnd];
+        const startChatIdx = pStart === 0 ? 0 : aiIdx[pStart - 1] + 1;
+        const aiMsg = String(chat[lastChatIdx].mes || '').trim();
+
+        // 构造本批对话文本（与 performEvolution 一致：含夹在中间的 user 楼层）
+        const dialogueText = chat.slice(startChatIdx, lastChatIdx + 1)
+          .map(m => (m.is_user ? '用户' : 'AI') + '：' + core.filterDialogue(String(m.mes || '').trim(), settings))
+          .filter(line => line.length > 3)
+          .join('\n');
+
+        onProgress({ phase: 'batch-start', batch: b + 1, totalBatches,
+          layerFrom: pStart + 1, layerTo: pEnd + 1, attempt: 0 });
+
+        // 每批重读 state（evolve 已落盘），与单轮路径一致
+        let ok = false;
+        let lastAttempt = 0;
+        for (let attempt = 0; attempt <= retries; attempt++) {
+          lastAttempt = attempt;
+          if (_backfillAborted) break;
+          const state = core.loadState();
+          ok = await evolve(state, '', aiMsg, { mode: 'forward', dialogueText });
+          if (ok) break;
+          if (_backfillAborted) break;
+          if (attempt < retries) {
+            console.warn(`[世界引擎] ⚠️ 第 ${b + 1}/${totalBatches} 批推演失败，重试 ${attempt + 1}/${retries}`);
+            onProgress({ phase: 'retry', batch: b + 1, totalBatches,
+              layerFrom: pStart + 1, layerTo: pEnd + 1, attempt: attempt + 1 });
+          }
+        }
+
+        if (!ok) {
+          if (_backfillAborted) {
+            return { done: false, reason: 'aborted', totalBatches, completedBatches, failedAt: b + 1 };
+          }
+          console.error(`[世界引擎] ❌ 第 ${b + 1}/${totalBatches} 批推演重试用尽仍失败，中止回填`);
+          onProgress({ phase: 'batch-failed', batch: b + 1, totalBatches,
+            layerFrom: pStart + 1, layerTo: pEnd + 1, attempt: lastAttempt });
+          return { done: false, reason: 'evolve-failed', totalBatches, completedBatches, failedAt: b + 1 };
+        }
+
+        completedBatches++;
+        const cur = core.loadState();
+        if (window.WORLD_ENGINE_LEDGER) {
+          try { window.WORLD_ENGINE_LEDGER.recordChanges(cur); } catch (e) {}
+        }
+        onProgress({ phase: 'batch-done', batch: b + 1, totalBatches,
+          layerFrom: pStart + 1, layerTo: pEnd + 1, attempt: lastAttempt, ok: true, round: cur.round });
+      }
+
+      onProgress({ phase: 'all-done', totalBatches, completedBatches });
+      return { done: true, totalBatches, completedBatches };
+    } catch (e) {
+      console.error('[世界引擎] 批量回填异常', e);
+      return { done: false, reason: 'exception', error: String(e && e.message || e), totalBatches, completedBatches };
+    } finally {
+      _backfillRunning = false;
+      _backfillAborted = false;
+    }
   }
 
   window.WORLD_ENGINE_DEBUG = {
     evolve,
+    backfillEvolve,
     callEvolutionAPI,
     forceTriggerEvents,
     decayWinds,
     state: () => core.loadState()
   };
 
-  return { evolve, getLastDebug, abort, isRunning };
+  return { evolve, backfillEvolve, getLastDebug, abort, isRunning };
 })();

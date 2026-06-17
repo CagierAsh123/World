@@ -1193,6 +1193,28 @@
   opacity: 0.58;
 }
 
+/* 蓝绿灯触发：条目主体（勾选+标题）占满，触发覆写下拉靠右 */
+.we-wb-entry-main {
+  display: flex;
+  gap: 7px;
+  align-items: flex-start;
+  flex: 1 1 auto;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.we-worldbook-entry > .we-wb-override {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  max-width: 96px;
+  padding: 1px 4px;
+  font-size: 10px;
+  color: var(--we-text2);
+  background: var(--we-surface);
+  border: 1px solid var(--we-border);
+  border-radius: 4px;
+}
+
 @media (max-width: 520px) {
   .we-event-editor-grid {
     grid-template-columns: 1fr 1fr;
