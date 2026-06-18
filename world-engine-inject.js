@@ -184,7 +184,8 @@ window.WORLD_ENGINE_INJECT = (function() {
 ${rulesSummary}
     `.trim();
 
-    return context.substring(0, 5000);
+    // 截到 5000 字；若切点落在 {{...}} 宏中间，去掉尾部残缺片段，避免下游宏解析报错
+    return context.substring(0, 5000).replace(/\{\{(?:(?!\}\}).)*$/s, '');
   }
 
   return { buildContext };
