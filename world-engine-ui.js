@@ -1281,7 +1281,9 @@ window.WORLD_ENGINE_UI = (function() {
       : JSON.parse(window.WORLD_ENGINE_STORE.getItem('world_engine_settings') || '{}');
     const mode = (settings.evolveMode === 'manual' || settings.evolveMode === 'time') ? settings.evolveMode : 'auto';
     const everyX = Math.max(1, parseInt(settings.evolveEveryX) || 1);
-    const readRounds = Math.min(everyX, Math.max(1, parseInt(settings.evolveReadRounds) || 1));
+    const _rrRaw = Math.max(1, parseInt(settings.evolveReadRounds) || 1);
+    // 仅 auto 模式 a 不得超过 X；手动模式不受 X 限制
+    const readRounds = mode === 'auto' ? Math.min(everyX, _rrRaw) : _rrRaw;
     // 按时间模式的当前值
     const _stForTime = core.hasState() ? core.loadState() : null;
     const _cpForTime = core.restoreCheckpoint();
@@ -1330,10 +1332,10 @@ window.WORLD_ENGINE_UI = (function() {
         <input type="number" id="we-evolve-everyx" min="1" step="1" value="${everyX}" style="width:100%;">
         <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">填 1 = 每轮推演；填 3 = 每向前 3 轮推演一次。重 roll 不计入轮数。</div>
       </div>
-      <div class="we-input-group" id="we-evolve-readrounds-group" style="${mode === 'auto' ? '' : 'display:none;'}">
+      <div class="we-input-group" id="we-evolve-readrounds-group" style="${(mode === 'auto' || mode === 'manual') ? '' : 'display:none;'}">
         <label>每次推演读取最近几轮对话（a）</label>
-        <input type="number" id="we-evolve-readrounds" min="1" max="${everyX}" step="1" value="${readRounds}" style="width:100%;">
-        <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">从当前层往前取 a 轮的「用户输入 + AI 输出」喂给后台推演。最小 1，最大不超过 X（每次推演的轮数）。默认 1 = 只读最新一轮。</div>
+        <input type="number" id="we-evolve-readrounds" min="1" ${mode === 'auto' ? `max="${everyX}"` : ''} step="1" value="${readRounds}" style="width:100%;">
+        <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">从当前层往前取 a 轮的「用户输入 + AI 输出」喂给后台推演。${mode === 'auto' ? '最小 1，最大不超过 X（每次推演的轮数）。' : '手动模式不受 X 限制，最小 1。'}默认 1 = 只读最新一轮。</div>
       </div>
       <div id="we-evolve-time-group" style="${mode === 'time' ? '' : 'display:none;'}">
         <div class="we-input-group" style="display:flex;gap:6px;">
@@ -2094,8 +2096,8 @@ window.WORLD_ENGINE_UI = (function() {
           evolveTimeThreshold: Math.max(1, parseInt(gv('we-time-threshold')) || 1),
           evolveTimeMaxRounds: Math.max(1, parseInt(gv('we-time-maxrounds')) || 10)
         };
-        // a 不得超过 X（每次推演的轮数）
-        ns.evolveReadRounds = Math.min(ns.evolveReadRounds, ns.evolveEveryX);
+        // a 不得超过 X（每次推演的轮数）——仅 auto 模式；手动模式不受 X 限制
+        if (ns.evolveMode === 'auto') ns.evolveReadRounds = Math.min(ns.evolveReadRounds, ns.evolveEveryX);
         window.WORLD_ENGINE_STORE.setItem('world_engine_settings', JSON.stringify(ns));
         if (window.WORLD_ENGINE_API) window.WORLD_ENGINE_API.getSettings(true);
 
@@ -2127,14 +2129,21 @@ window.WORLD_ENGINE_UI = (function() {
     if (evolveModeSel) {
       evolveModeSel.onchange = () => {
         const v = evolveModeSel.value;
-        const roundShow = v === 'auto' ? '' : 'none';
+        const everyxShow = v === 'auto' ? '' : 'none';        // 仅 auto 用 X
+        const readShow = (v === 'auto' || v === 'manual') ? '' : 'none'; // auto/手动都要 a
         const timeShow = v === 'time' ? '' : 'none';
         const g1 = document.getElementById('we-evolve-everyx-group');
-        if (g1) g1.style.display = roundShow;
+        if (g1) g1.style.display = everyxShow;
         const g2 = document.getElementById('we-evolve-readrounds-group');
-        if (g2) g2.style.display = roundShow;
+        if (g2) g2.style.display = readShow;
         const g3 = document.getElementById('we-evolve-time-group');
         if (g3) g3.style.display = timeShow;
+        // a 的 max：auto 跟随 X，手动不限制
+        const readInput = document.getElementById('we-evolve-readrounds');
+        if (readInput) {
+          if (v === 'auto') readInput.max = document.getElementById('we-evolve-everyx')?.value || '';
+          else readInput.removeAttribute('max');
+        }
       };
     }
 
@@ -2865,10 +2874,10 @@ window.WORLD_ENGINE_UI = (function() {
       const lastMsg = chat[chat.length - 1];
       const userMsg = lastMsg?.is_user ? (lastMsg.mes || '') : '';
       const aiMsg = !lastMsg?.is_user ? (lastMsg?.mes || '') : '';
-      // 读取轮数：手动/时间模式 → min(自上次推演经过轮数, 上限X)；按轮模式 → a（≤X）。start 做负数保护。
+      // 读取轮数：时间模式 → min(自上次推演经过轮数, 上限X)；手动/按轮 → a（手动不夹紧，auto 夹到 X）。start 做负数保护。
       const st = window.WORLD_ENGINE_API ? window.WORLD_ENGINE_API.getSettings(true) : {};
       let rounds;
-      if (st.evolveMode === 'manual' || st.evolveMode === 'time') {
+      if (st.evolveMode === 'time') {
         const Xmax = Math.max(1, parseInt(st.evolveTimeMaxRounds) || 10);
         const cpp = core.restoreCheckpoint();
         const L = core.getChatLayer();
@@ -2878,8 +2887,11 @@ window.WORLD_ENGINE_UI = (function() {
         const since = Math.floor(Math.max(0, L - anchorL) / 2);
         rounds = Math.max(1, Math.min(since, Xmax));
       } else {
-        const everyX = Math.max(1, parseInt(st.evolveEveryX) || 1);
-        rounds = Math.min(everyX, Math.max(1, parseInt(st.evolveReadRounds) || 1));
+        const a = Math.max(1, parseInt(st.evolveReadRounds) || 1);
+        // 手动模式不受 X 限制；按轮(auto) 模式 a 不得超过 X
+        rounds = st.evolveMode === 'auto'
+          ? Math.min(Math.max(1, parseInt(st.evolveEveryX) || 1), a)
+          : a;
       }
       const start = Math.max(0, chat.length - rounds * 2);
       const dialogueText = chat.slice(start)
