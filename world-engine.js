@@ -286,14 +286,9 @@
             return;
           }
           timeStoryDay = currentDay;
-          // 自上次推演经过的轮数（楼层锚点：存档点层 → 当前状态层 → 当前层），与上限 X 取小
+          // 自上次推演经过的轮数（按 isNewRound 正确分流：新轮次从当前状态层、重roll从存档点层），与上限 X 取小
           const Xmax = Math.max(1, parseInt(settings.evolveTimeMaxRounds) || 10);
-          const Lnow = core.getChatLayer();
-          let anchorL = (cp && cp.chatLayer != null) ? Number(cp.chatLayer)
-                      : (st && st.chatLayer != null ? Number(st.chatLayer) : Lnow);
-          if (!Number.isFinite(anchorL)) anchorL = Lnow;
-          const since = Math.floor(Math.max(0, Lnow - anchorL) / 2);
-          timeReadRounds = Math.max(1, Math.min(since, Xmax));
+          timeReadRounds = Math.max(1, Math.min(core.roundsSinceLastEvolve(), Xmax));
         } else {
           const L = core.getChatLayer();
           const cp = core.restoreCheckpoint();

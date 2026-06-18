@@ -2874,24 +2874,19 @@ window.WORLD_ENGINE_UI = (function() {
       const lastMsg = chat[chat.length - 1];
       const userMsg = lastMsg?.is_user ? (lastMsg.mes || '') : '';
       const aiMsg = !lastMsg?.is_user ? (lastMsg?.mes || '') : '';
-      // 读取轮数：时间模式 → min(自上次推演经过轮数, 上限X)；手动/按轮 → a（手动不夹紧，auto 夹到 X）。start 做负数保护。
+      // 读取轮数：时间模式 → min(自上次推演经过轮数, 上限X)；手动 → min(a, 自上次推演经过轮数)；按轮 → min(a, X)。start 做负数保护。
       const st = window.WORLD_ENGINE_API ? window.WORLD_ENGINE_API.getSettings(true) : {};
       let rounds;
       if (st.evolveMode === 'time') {
         const Xmax = Math.max(1, parseInt(st.evolveTimeMaxRounds) || 10);
-        const cpp = core.restoreCheckpoint();
-        const L = core.getChatLayer();
-        let anchorL = (cpp && cpp.chatLayer != null) ? Number(cpp.chatLayer)
-                    : (s && s.chatLayer != null ? Number(s.chatLayer) : L);
-        if (!Number.isFinite(anchorL)) anchorL = L;
-        const since = Math.floor(Math.max(0, L - anchorL) / 2);
-        rounds = Math.max(1, Math.min(since, Xmax));
-      } else {
+        rounds = Math.max(1, Math.min(core.roundsSinceLastEvolve(), Xmax));
+      } else if (st.evolveMode === 'auto') {
         const a = Math.max(1, parseInt(st.evolveReadRounds) || 1);
-        // 手动模式不受 X 限制；按轮(auto) 模式 a 不得超过 X
-        rounds = st.evolveMode === 'auto'
-          ? Math.min(Math.max(1, parseInt(st.evolveEveryX) || 1), a)
-          : a;
+        rounds = Math.min(Math.max(1, parseInt(st.evolveEveryX) || 1), a); // a 不得超过 X
+      } else {
+        // 手动：min(a, 自上次推演经过轮数)，不重复读已推演的轮；至少 1
+        const a = Math.max(1, parseInt(st.evolveReadRounds) || 1);
+        rounds = Math.max(1, Math.min(a, core.roundsSinceLastEvolve()));
       }
       const start = Math.max(0, chat.length - rounds * 2);
       const dialogueText = chat.slice(start)

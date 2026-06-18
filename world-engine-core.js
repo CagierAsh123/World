@@ -304,6 +304,26 @@ window.WORLD_ENGINE_CORE = (function() {
     return oldFp !== newFp;
   }
 
+  /**
+   * 自上次推演经过的轮数（一问一答为一轮，故除 2）。
+   * 锚点按 isNewRound 分流，与时间基准 base=isNew?st:cp 一致：
+   *   新轮次 → 当前状态层（上次推演那一层），不把已推演的上一轮重复算入；
+   *   重 roll → 存档点层（本轮起点），把本轮重新读一遍。
+   * 缺锚点时回退到另一侧，再退到当前层（返回 0）。
+   */
+  function roundsSinceLastEvolve() {
+    const L = getChatLayer();
+    const st = hasState() ? loadState() : null;
+    const cp = restoreCheckpoint();
+    const stL = st && Number.isFinite(Number(st.chatLayer)) ? Number(st.chatLayer) : null;
+    const cpL = cp && Number.isFinite(Number(cp.chatLayer)) ? Number(cp.chatLayer) : null;
+    let anchorL = isNewRound()
+      ? (stL != null ? stL : (cpL != null ? cpL : L))   // 新轮次：当前状态优先
+      : (cpL != null ? cpL : (stL != null ? stL : L));  // 重 roll：存档点优先
+    if (!Number.isFinite(anchorL)) anchorL = L;
+    return Math.floor(Math.max(0, L - anchorL) / 2);
+  }
+
   function addMemory(state, memory) {
     if (!state) return;
     state.memories.unshift(memory);
@@ -567,7 +587,7 @@ window.WORLD_ENGINE_CORE = (function() {
     addMemory, addEvent, addFaction, addWorldTrend, addWind,
     ensureEventFields, getUserName, renderUserName,
     saveCheckpoint, restoreCheckpoint, clearCheckpoint, getAnchorLayer, setAnchorLayer,
-    getChatLayer, getChatFingerprint, saveFingerprint, loadFingerprint, isNewRound,
+    getChatLayer, getChatFingerprint, saveFingerprint, loadFingerprint, isNewRound, roundsSinceLastEvolve,
     getCleanExport, importState,
     cnToNum, parseStoryDay, getLastStoryDay, setLastStoryDay, filterDialogue
   };
