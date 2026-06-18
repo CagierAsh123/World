@@ -71,17 +71,18 @@ window.WORLD_ENGINE_INJECT = (function() {
     const rulesLoader = window.WORLD_ENGINE_RULES;
     const rulesSummary = rulesLoader ? rulesLoader.getCoreRulesSummary() : '';
 
-    // 事件链：Lv3/4 全注入，Lv1/2 仅已爆发/已完成终局注入
-    const visibleEvents = (worldState.events || []).filter(e => {
-      if (e.level >= 3) return true;
-      return e.stage === '已爆发' || e.stage === '已完成';
-    });
-    const eventsText = visibleEvents.map(e => {
-      const typeName = e.type === 'progress' ? '推进型' : '冲突型';
-      let txt = `${e.name}(${typeName}, Lv.${e.level}) ${e.stage} ${e.stageRound||1}/9`;
-      if (e.evolveResult) txt += ` [${e.evolveResult}]`;
-      return txt;
-    }).join('；') || '无';
+    // 事件链：全部注入正文（含描述），不分等级
+    const visibleEvents = worldState.events || [];
+    const eventsText = visibleEvents.length
+      ? '\n' + visibleEvents.map(e => {
+          const typeName = e.type === 'progress' ? '推进型' : '冲突型';
+          let txt = `- ${e.name}（${typeName}, Lv.${e.level}）${e.stage} ${e.stageRound||1}/9`;
+          if (e.evolveResult) txt += ` [${e.evolveResult}]`;
+          if (e.stall) txt += '（停滞）';
+          if (e.desc) txt += `：${e.desc}`;
+          return txt;
+        }).join('\n')
+      : '无';
 
     // 势力：全部7级关系都注入，渲染成自然语句，运势/关系各带判词
     const formatPillars = (arr) => arr.length === 1
@@ -184,8 +185,7 @@ window.WORLD_ENGINE_INJECT = (function() {
 ${rulesSummary}
     `.trim();
 
-    // 截到 5000 字；若切点落在 {{...}} 宏中间，去掉尾部残缺片段，避免下游宏解析报错
-    return context.substring(0, 5000).replace(/\{\{(?:(?!\}\}).)*$/s, '');
+    return context;
   }
 
   return { buildContext };
