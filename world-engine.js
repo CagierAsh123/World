@@ -47,6 +47,15 @@
         console.log('[世界引擎] 已加载:', mod);
       }
 
+      // 读取扩展版本号（来自 manifest.json，单一真相源）供 UI 显示；失败不阻断启动
+      try {
+        const resp = await fetch(baseUrl + '/manifest.json', { cache: 'no-cache' });
+        if (resp && resp.ok) {
+          const mf = await resp.json();
+          if (mf && mf.version) window.WORLD_ENGINE_VERSION = String(mf.version);
+        }
+      } catch (e) { /* 读不到版本号不影响功能，UI 端自行降级隐藏 */ }
+
       // 先把存储灌入内存镜像（并迁移旧 localStorage 存档），之后所有同步读写才有数据
       if (window.WORLD_ENGINE_STORE) {
         await window.WORLD_ENGINE_STORE.hydrate();

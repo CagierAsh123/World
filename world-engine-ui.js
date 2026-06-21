@@ -92,6 +92,7 @@ window.WORLD_ENGINE_UI = (function() {
         <div class="we-header-info">
           <div class="we-header-top">
             <span class="we-panel-title">世界引擎</span>
+            <span class="we-panel-version" id="we-panel-version"></span><!-- [FIX] 版本号 -->
             <span class="we-header-round" id="we-header-round"></span>
           </div>
           <div class="we-header-mood" id="we-header-mood">
@@ -111,6 +112,14 @@ window.WORLD_ENGINE_UI = (function() {
     document.body.appendChild(panel);
     panelElement = panel;
     panelBodyElement = panel.querySelector('#we-panel-body');
+
+    // [FIX] 显示扩展版本号（来自 manifest.json，读不到则隐藏）
+    const verEl = panel.querySelector('#we-panel-version');
+    if (verEl) {
+      const v = window.WORLD_ENGINE_VERSION;
+      if (v) verEl.textContent = 'v' + v;
+      else verEl.style.display = 'none';
+    }
 
     panel.querySelector('.we-panel-close').onclick = () => hidePanel();
     initDrag(panel, panel.querySelector('.we-panel-header'));
