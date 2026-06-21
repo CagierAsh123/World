@@ -449,7 +449,7 @@ window.WORLD_ENGINE_UI = (function() {
       + '<div class="we-section-title"><span class="we-debug-toggle" title="展开或收起调试信息"><span class="we-toggle-arrow">▶</span>调试</span></div>'
       + '<div id="we-debug-body" style="display:none;">'
       + '<button class="we-btn" id="we-export-diag" style="width:100%;margin-bottom:8px;">导出诊断包</button><!-- [FIX] 诊断包：与是否已推演无关，始终可导出 -->'
-      + renderDebug() + '</div></div>';
+      + '<div id="we-debug-render">' + renderDebug() + '</div></div></div>';
 
     // 各选项卡承载的片段（每个 section 恰好出现一次，零重复）
     const panelContent = {
@@ -1303,27 +1303,147 @@ window.WORLD_ENGINE_UI = (function() {
     });
   }
 
+  // [FIX] 推演 prompt 分段卡片折叠绑定（模块级，供装配 + 局部刷新复用）。事件委托。
+  function bindPromptSegToggle(root) {
+    if (!root) return;
+    root.addEventListener('click', function(e) {
+      const head = e.target.closest('[data-we-seg-toggle]');
+      if (!head) return;
+      const card = head.parentElement;
+      const body = card && card.querySelector('.we-prompt-seg-body');
+      const arrow = head.querySelector('.we-prompt-seg-arrow');
+      if (!body) return;
+      const isHidden = body.style.display === 'none';
+      body.style.display = isHidden ? 'block' : 'none';
+      if (arrow) arrow.textContent = isHidden ? '▼' : '▶';
+    });
+  }
+
+  // [FIX] 局部刷新调试卡的 renderDebug 部分：只替换 #we-debug-render 内容并重绑段折叠，
+  // 不动其它选项卡 DOM（保护用户在其它 tab 未保存的输入）。切到调试 tab 时调。
+  function refreshDebugRender() {
+    const box = document.getElementById('we-debug-render');
+    if (!box) return;
+    box.innerHTML = renderDebug();
+    bindPromptSegToggle(box.querySelector('.we-prompt-debug'));
+    // 导出按钮在 renderDebug 输出内，重绑
+    const exportPromptBtn = document.getElementById('we-export-prompt');
+    if (exportPromptBtn) {
+      exportPromptBtn.onclick = () => {
+        const evo = window.WORLD_ENGINE_EVOLUTION;
+        if (!evo || !evo.getLastDebug) return;
+        const dbg = evo.getLastDebug();
+        if (!dbg.prompt) { showToast('无 Prompt 可导出', true); return; }
+        const blob = new Blob([dbg.prompt], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = 'prompt-' + Date.now() + '.txt'; a.click();
+        URL.revokeObjectURL(url);
+        showToast('Prompt 已导出');
+      };
+    }
+    const exportRawBtn = document.getElementById('we-export-raw-result');
+    if (exportRawBtn) {
+      exportRawBtn.onclick = () => {
+        const evo = window.WORLD_ENGINE_EVOLUTION;
+        if (!evo || !evo.getLastDebug) return;
+        const dbg = evo.getLastDebug();
+        if (!dbg.rawResult) { showToast('无 API 返回可导出', true); return; }
+        const blob = new Blob([dbg.rawResult], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = 'api-raw-' + Date.now() + '.txt'; a.click();
+        URL.revokeObjectURL(url);
+        showToast('API 返回已导出');
+      };
+    }
+  }
+
+  // [FIX] renderDebug：推演 prompt 全透明分段展示（只读，不改可编辑）。
+  // 把推演 API 收到的整块 prompt 按 10 段拆开折叠展示 + AI 返回 JSON 高亮，只看最新一轮。
+  // 数据源 evo.getLastDebug().segments（evolution.js 拼装侧镜像，与实际发出 prompt 字节级一致）。
   function renderDebug() {
     const evo = window.WORLD_ENGINE_EVOLUTION;
     if (!evo || !evo.getLastDebug) return '<div class="we-empty">调试数据不可用</div>';
     const dbg = evo.getLastDebug();
-    if (!dbg.prompt) return '<div class="we-empty">尚未推演，暂无调试数据</div>';
-    const truncPrompt = dbg.prompt.length > 3000 ? dbg.prompt.substring(0, 3000) + '\n\n...(截断，点击下方按钮导出完整文件)' : dbg.prompt;
-    const truncResult = dbg.rawResult.length > 3000 ? dbg.rawResult.substring(0, 3000) + '\n\n...(截断，点击下方按钮导出完整文件)' : dbg.rawResult;
-    return `
-      <div style="margin-bottom:8px;">
-        <div style="font-size:12px;color:var(--we-text2);margin-bottom:4px;">发送给 API 的 Prompt（前3000字预览）</div>
-        <pre style="font-size:11px;background:var(--we-bg2);padding:6px;border-radius:4px;max-height:200px;overflow:auto;white-space:pre-wrap;word-break:break-all;">${u(truncPrompt)}</pre>
-      </div>
-      <div>
-        <div style="font-size:12px;color:var(--we-text2);margin-bottom:4px;">API 原始返回（前3000字预览）</div>
-        <pre style="font-size:11px;background:var(--we-bg2);padding:6px;border-radius:4px;max-height:200px;overflow:auto;white-space:pre-wrap;word-break:break-all;">${u(truncResult)}</pre>
-      </div>
-      <div style="display:flex;gap:6px;margin-top:8px;">
-        <button class="we-btn" id="we-export-prompt" style="flex:1;">导出 Prompt</button>
-        <button class="we-btn" id="we-export-raw-result" style="flex:1;">导出 API 返回</button>
-      </div>
-    `;
+    if (!dbg || !dbg.prompt) return '<div class="we-empty">尚未推演，暂无调试数据</div>';
+
+    const segments = Array.isArray(dbg.segments) ? dbg.segments : [];
+    const totalLen = dbg.prompt.length || 0;
+    // 段占比微条：每段宽度按字数占比
+    const barHtml = segments.length
+      ? '<div class="we-prompt-seg-bar">' + segments.map(seg => {
+          const len = (seg.content || '').length;
+          const pct = totalLen ? (len / totalLen * 100) : 0;
+          return '<span class="we-prompt-seg-bar-cell" style="width:' + pct.toFixed(2) + '%" title="' + u(seg.label) + ' ' + len + '字"></span>';
+        }).join('') + '</div>'
+      : '';
+
+    // 尝试把 content 里第一个 JSON 对象 pretty-print（用于状态段/示例段高亮）
+    const tryPrettyJson = (text) => {
+      if (!text) return null;
+      const api = window.WORLD_ENGINE_API;
+      // 直接 JSON.parse 失败则用 api.parseJSON 容错
+      let obj = null;
+      try { obj = JSON.parse(text); } catch (e) {
+        if (api && api.parseJSON) { try { obj = api.parseJSON(text); } catch (e2) {} }
+      }
+      if (obj === null || typeof obj !== 'object') return null;
+      try { return JSON.stringify(obj, null, 2); } catch (e) { return null; }
+    };
+
+    // 单段折叠卡片
+    const segCard = (idx, seg) => {
+      const content = seg.content || '';
+      const len = content.length;
+      const pct = totalLen ? (len / totalLen * 100).toFixed(1) : '0.0';
+      const isEmpty = len === 0;
+      // 状态段/示例段尝试 JSON 高亮
+      let bodyHtml;
+      if (isEmpty) {
+        bodyHtml = '<div class="we-prompt-seg-empty">本轮未启用</div>';
+      } else {
+        const pretty = tryPrettyJson(content);
+        const shown = pretty !== null ? pretty : content;
+        bodyHtml = '<pre class="we-prompt-seg-pre' + (pretty !== null ? ' we-prompt-seg-pre-json' : '') + '">' + u(shown) + '</pre>';
+      }
+      return '<div class="we-prompt-seg-card" data-we-seg-key="' + u(seg.key) + '">'
+        + '<div class="we-prompt-seg-head" data-we-seg-toggle>'
+        + '<span class="we-prompt-seg-arrow">▶</span>'
+        + '<span class="we-prompt-seg-label">' + u(seg.label) + '</span>'
+        + '<span class="we-prompt-seg-meta">' + (isEmpty ? '空' : (len + '字 · ' + pct + '%')) + '</span>'
+        + '</div>'
+        + '<div class="we-prompt-seg-body" style="display:none;">' + bodyHtml + '</div>'
+        + '</div>';
+    };
+
+    // AI 返回卡
+    const rawResult = dbg.rawResult || '';
+    const rawLen = rawResult.length;
+    const parsedJson = tryPrettyJson(rawResult);
+    const rawBodyHtml = rawLen
+      ? (parsedJson !== null
+          ? '<pre class="we-prompt-seg-pre we-prompt-seg-pre-json">' + u(parsedJson) + '</pre>'
+          : '<pre class="we-prompt-seg-pre">' + u(rawResult) + '</pre>')
+      : '<div class="we-prompt-seg-empty">无 API 返回</div>';
+    const rawCard = '<div class="we-prompt-seg-card we-prompt-seg-card-raw">'
+      + '<div class="we-prompt-seg-head" data-we-seg-toggle>'
+      + '<span class="we-prompt-seg-arrow">▶</span>'
+      + '<span class="we-prompt-seg-label">AI 返回（推演 API 原始结果）</span>'
+      + '<span class="we-prompt-seg-meta">' + (rawLen ? (rawLen + '字' + (parsedJson !== null ? ' · JSON 已解析' : ' · 未能解析为 JSON')) : '空') + '</span>'
+      + '</div>'
+      + '<div class="we-prompt-seg-body" style="display:none;">' + rawBodyHtml + '</div>'
+      + '</div>';
+
+    return ''
+      + '<div class="we-prompt-debug">'
+      + '<div class="we-prompt-debug-summary">发送给推演 API 的 Prompt 共 ' + totalLen + ' 字，分 ' + segments.length + ' 段（只读展示，与实际发出字节一致）</div>'
+      + barHtml
+      + '<div class="we-prompt-seg-list">' + segments.map((seg, i) => segCard(i, seg)).join('') + '</div>'
+      + rawCard
+      + '<div style="display:flex;gap:6px;margin-top:8px;">'
+      + '<button class="we-btn" id="we-export-prompt" style="flex:1;">导出完整 Prompt</button>'
+      + '<button class="we-btn" id="we-export-raw-result" style="flex:1;">导出 API 返回</button>'
+      + '</div>'
+      + '</div>';
   }
 
   function renderSettingsForm() {
@@ -2183,6 +2303,8 @@ window.WORLD_ENGINE_UI = (function() {
           t.classList.toggle('we-settings-tab--active', t.dataset.tab === key));
         document.querySelectorAll('.we-settings-panel').forEach(p =>
           p.style.display = (p.dataset.tab === key) ? '' : 'none');
+        // [FIX] 切到调试 tab 时，局部刷新 renderDebug 拉最新一轮推演数据（不动其它 tab 输入）
+        if (key === 'debug') refreshDebugRender();
       };
     });
 
@@ -2502,7 +2624,7 @@ window.WORLD_ENGINE_UI = (function() {
           const isHidden = body.style.display === 'none';
           body.style.display = isHidden ? 'block' : 'none';
           if (arrow) arrow.textContent = isHidden ? '▼' : '▶';
-          if (!isHidden) refresh();
+          if (!isHidden) refreshDebugRender(); // [FIX] 局部刷新调试卡数据，不动其它 tab 输入
         }
       };
     }
@@ -2865,6 +2987,9 @@ window.WORLD_ENGINE_UI = (function() {
         showToast('API 返回已导出');
       };
     }
+
+    // [FIX] 推演 prompt 分段卡片折叠（事件委托，逻辑在模块级 bindPromptSegToggle）
+    bindPromptSegToggle(document.querySelector('.we-prompt-debug'));
 
     // [FIX] 导出诊断包
     const exportDiagBtn = document.getElementById('we-export-diag');

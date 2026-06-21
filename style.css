@@ -2960,3 +2960,54 @@
 }
 .we-snapshot-badge.is-auto { border-color: var(--we-text3); color: var(--we-text3); }
 .we-snapshot-actions { display: flex; gap: 2px; flex-shrink: 0; }
+
+/* [FIX] 推演 prompt 全透明分段展示（调试卡，只读） */
+.we-prompt-debug { margin-top: 4px; }
+.we-prompt-debug-summary {
+  font-size: 11px; color: var(--we-text2); margin-bottom: 6px;
+  line-height: 1.5;
+}
+.we-prompt-seg-bar {
+  display: flex; width: 100%; height: 6px; border-radius: 3px; overflow: hidden;
+  background: var(--we-bg2); margin-bottom: 10px;
+}
+.we-prompt-seg-bar-cell {
+  display: inline-block; height: 100%;
+  background: var(--we-accent); opacity: 0.55;
+}
+.we-prompt-seg-bar-cell:nth-child(odd) { opacity: 0.85; }
+.we-prompt-seg-list { display: flex; flex-direction: column; gap: 4px; }
+.we-prompt-seg-card {
+  border: 1px solid var(--we-border, #3a3a3a); border-radius: 4px; overflow: hidden;
+  background: var(--we-bg);
+}
+.we-prompt-seg-card-raw { border-color: var(--we-accent); }
+.we-prompt-seg-head {
+  display: flex; align-items: center; gap: 6px; padding: 6px 8px; cursor: pointer;
+  user-select: none;
+}
+.we-prompt-seg-head:hover { background: var(--we-bg2); }
+.we-prompt-seg-arrow {
+  font-size: 10px; color: var(--we-text3); flex-shrink: 0; width: 10px;
+}
+.we-prompt-seg-label { font-size: 12px; color: var(--we-text); flex: 1; }
+.we-prompt-seg-meta {
+  font-size: 11px; color: var(--we-text3); flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+.we-prompt-seg-body { padding: 0 8px 8px 8px; }
+.we-prompt-seg-empty {
+  font-size: 11px; color: var(--we-text3); font-style: italic; padding: 4px 0;
+}
+.we-prompt-seg-pre {
+  font-size: 11px; line-height: 1.5;
+  background: var(--we-bg2); padding: 6px; border-radius: 4px;
+  max-height: 320px; overflow: auto;
+  white-space: pre-wrap; word-break: break-word;
+  color: var(--we-text); margin: 0;
+}
+.we-prompt-seg-pre-json {
+  color: var(--we-green, #58e8b3);
+  font-family: var(--we-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+}
+
