@@ -307,6 +307,15 @@
   line-height: 1.1;
 }
 
+/* [FIX] 标题旁的版本号：低调小字 */
+.we-panel-version {
+  font-family: "Songti SC", "SimSun", "STSong", serif;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  color: var(--we-text3);
+  opacity: 0.75;
+}
+
 .we-panel-header-actions {
   display: flex;
   align-items: center;
@@ -2402,6 +2411,47 @@
   font-weight: 600;
   color: var(--we-text);
   letter-spacing: 0.03em;
+}
+
+/* [FIX] ===== 设置页选项卡 ===== */
+.we-settings-tabs {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--we-border);
+  margin-bottom: 12px;
+  scrollbar-width: none;
+}
+.we-settings-tabs::-webkit-scrollbar { display: none; }
+.we-settings-tab {
+  flex: 0 0 auto;
+  padding: 7px 14px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--we-text2);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s;
+}
+.we-settings-tab:hover { color: var(--we-text); }
+.we-settings-tab--active {
+  color: var(--we-gold);
+  border-bottom-color: var(--we-gold);
+}
+.we-settings-panel { margin-bottom: 4px; }
+/* 保存条底部常驻 */
+.we-settings-save-sticky {
+  position: sticky;
+  bottom: 0;
+  background: #182028;
+  padding-top: 10px;
+  margin-top: 4px;
+  border-top: 1px solid var(--we-border);
+  z-index: 2;
 }
 
 /* ===== 主页导航列表 ===== */

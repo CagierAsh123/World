@@ -11,6 +11,8 @@ window.WORLD_ENGINE_API = (function() {
       model: 'gpt-3.5-turbo',
       temperature: 0.7,
       maxTokens: 2000,
+      // [FIX] 连接方式：'direct'=浏览器直连（默认，原有行为）；'proxy'=经酒馆服务端转发，绕过第三方 API 的 CORS 限制
+      connectionMode: 'direct',
       injectIntoPrompt: true,
       evolveMode: 'auto',
       // 酒馆缓存：把按聊天隔离的存档镜像进 chat_metadata，实现跨设备同步与防丢失存档（默认关闭）
@@ -50,13 +52,69 @@ window.WORLD_ENGINE_API = (function() {
     return u + '/v1/chat/completions';
   }
 
+  // [FIX] 经酒馆代理用：从完整的 chat/completions URL 还原出 base（形如 https://host/v1），
+  // 交给酒馆后端，由它自己拼 /chat/completions 与 /models。
+  function getProxyBase(settings) {
+    return normalizeUrl(settings.apiUrl).replace(/\/chat\/completions$/, '');
+  }
+
+  // [FIX] 调酒馆自身后端端点需要携带其 CSRF/鉴权头；仅在酒馆环境中可用。
+  function tavernHeaders() {
+    try {
+      const ctx = (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) ? SillyTavern.getContext() : null;
+      if (ctx && typeof ctx.getRequestHeaders === 'function') {
+        const h = ctx.getRequestHeaders();
+        if (h && !h['Content-Type'] && !h['content-type']) h['Content-Type'] = 'application/json';
+        return h;
+      }
+    } catch (e) {}
+    throw new Error('经酒馆代理需要在酒馆环境中运行（未取到酒馆请求头）');
+  }
+
+  // [FIX] 经酒馆服务端转发的推演调用：浏览器 → 同源酒馆后端（无 CORS）→ 服务端代发到第三方 API。
+  // 走 OpenAI source + reverse_proxy 路线，这样可把我们自己的 URL/KEY 透传给上游。
+  async function callApiViaProxy(settings, body, signal) {
+    const base = getProxyBase(settings);
+    if (!base) throw new Error('未配置 API URL，请在设置中填写');
+    const payload = {
+      chat_completion_source: 'openai',
+      reverse_proxy: base,
+      proxy_password: settings.apiKey || '',
+      model: body.model,
+      messages: body.messages,
+      temperature: body.temperature,
+      max_tokens: body.max_tokens,
+      stream: false
+    };
+    console.log('[世界引擎] 调用 API（经酒馆代理）:', base, payload.model);
+    const resp = await fetch('/api/backends/chat-completions/generate', {
+      method: 'POST',
+      headers: tavernHeaders(),
+      body: JSON.stringify(payload),
+      signal: signal || null
+    });
+    if (!resp.ok) {
+      let detail = '';
+      try { const err = await resp.json(); detail = err.error?.message || JSON.stringify(err); } catch(e) {}
+      throw new Error(`HTTP ${resp.status}: ${detail}`);
+    }
+    const data = await resp.json();
+    if (data && data.error) {
+      throw new Error('酒馆代理返回错误：' + (data.error.message || JSON.stringify(data.error)));
+    }
+    const choice = data.choices?.[0];
+    if (!choice) throw new Error('API 返回缺少 choices[0]');
+    if (choice.finish_reason === 'length') {
+      console.warn('[世界引擎] API 输出达到长度上限，将读取截断前已完整返回的字段');
+    }
+    return choice.message?.content || '';
+  }
+
   /**
    * 调用独立 API（非酒馆自带），OpenAI 兼容格式
    */
   async function callApi(prompt, maxTokens, temperature, signal) {
     const settings = getSettings();
-    const url = normalizeUrl(settings.apiUrl);
-    if (!url) throw new Error('未配置 API URL，请在设置中填写');
 
     const body = {
       model: settings.model || 'gpt-3.5-turbo',
@@ -64,6 +122,14 @@ window.WORLD_ENGINE_API = (function() {
       temperature: temperature ?? settings.temperature ?? 0.7,
       max_tokens: maxTokens ?? settings.maxTokens ?? 2000
     };
+
+    // [FIX] 经酒馆代理：绕过第三方 API 的 CORS 限制，由酒馆 Node 服务端转发
+    if (settings.connectionMode === 'proxy') {
+      return callApiViaProxy(settings, body, signal);
+    }
+
+    const url = normalizeUrl(settings.apiUrl);
+    if (!url) throw new Error('未配置 API URL，请在设置中填写');
 
     const headers = {
       'Content-Type': 'application/json'
@@ -185,6 +251,28 @@ window.WORLD_ENGINE_API = (function() {
   async function fetchModelList() {
     const settings = getSettings();
     const baseUrl = normalizeUrl(settings.apiUrl).replace(/\/chat\/completions$/, '');
+
+    // [FIX] 经酒馆代理：用酒馆 /status 端点拉模型列表，绕过 CORS
+    if (settings.connectionMode === 'proxy') {
+      if (!baseUrl) throw new Error('未配置 API URL，请在设置中填写');
+      const resp = await fetch('/api/backends/chat-completions/status', {
+        method: 'POST',
+        headers: tavernHeaders(),
+        body: JSON.stringify({
+          chat_completion_source: 'openai',
+          reverse_proxy: baseUrl,
+          proxy_password: settings.apiKey || ''
+        })
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      if (data && data.error) throw new Error('酒馆代理拉取模型失败（请检查 URL/密钥是否正确）');
+      if (data.data && Array.isArray(data.data)) {
+        return data.data.map(m => m.id);
+      }
+      throw new Error('无法解析模型列表');
+    }
+
     const url = baseUrl + '/models';
     const headers = { 'Content-Type': 'application/json' };
     if (settings.apiKey) headers['Authorization'] = 'Bearer ' + settings.apiKey;
