@@ -13,6 +13,14 @@ window.WORLD_ENGINE_API = (function() {
       maxTokens: 2000,
       injectIntoPrompt: true,
       evolveMode: 'auto',
+      // 酒馆缓存：把按聊天隔离的存档镜像进 chat_metadata，实现跨设备同步与防丢失存档（默认关闭）
+      syncToChat: false,   // 实时同步：工作区状态持续镜像进聊天，换设备打开同一聊天即可续上
+      autoBackup: false,   // 滚动自动备份：每当轮次推进，自动存一条到聊天（保留最近几条）
+      worldbookTrigger: false, // 世界书蓝绿灯触发：🔵常驻恒注入 / 🟢关键词命中才注入（默认关闭=全部已选注入）
+      // 批量重填世界推演：从第 1 个 AI 楼层分批推到指定楼层（清空重来）
+      backfillBatchSize: 5,    // 每批 AI 楼层数（每多少层调一次推演）
+      backfillRetries: 2,      // 每批独立重试次数（推演失败时重试上限）
+      backfillEndLayer: 0,     // 结束 AI 楼层（0 = 推到最后一个 AI 楼层）
       evolveEveryX: 1,
       evolveReadRounds: 1,
       evolveFilterRegex: '',
