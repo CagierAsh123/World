@@ -1468,18 +1468,24 @@ window.WORLD_ENGINE_UI = (function() {
     root = root || document.getElementById('we-preset-manage');
     if (!root) return;
 
-    // 段折叠（事件委托，独立 data-attr，不与 bindPromptSegToggle 的 data-we-seg-toggle 冲突）
-    root.addEventListener('click', function (e) {
-      const head = e.target.closest('[data-we-preset-toggle]');
-      if (!head) return;
-      const card = head.parentElement;
-      const body = card && card.querySelector('.we-preset-seg-body');
-      const arrow = head.querySelector('.we-prompt-seg-arrow');
-      if (!body) return;
-      const isHidden = body.style.display === 'none';
-      body.style.display = isHidden ? 'block' : 'none';
-      if (arrow) arrow.textContent = isHidden ? '▼' : '▶';
-    });
+    // 段折叠（事件委托，独立 data-attr，不与 bindPromptSegToggle 的 data-we-seg-toggle 冲突）。
+    // [FIX] 委托只需绑一次：refreshPresetManage 每次只换 root.innerHTML（子节点全新），
+    // root 节点本身不变，委托靠冒泡一直有效。用守卫避免每次刷新都 addEventListener 导致
+    // 监听累积（点 10 次保存就会在同一个 root 上叠 10 层 click，折叠头点一次触发 10 次）。
+    if (!root.__wePresetDelegated) {
+      root.__wePresetDelegated = true;
+      root.addEventListener('click', function (e) {
+        const head = e.target.closest('[data-we-preset-toggle]');
+        if (!head) return;
+        const card = head.parentElement;
+        const body = card && card.querySelector('.we-preset-seg-body');
+        const arrow = head.querySelector('.we-prompt-seg-arrow');
+        if (!body) return;
+        const isHidden = body.style.display === 'none';
+        body.style.display = isHidden ? 'block' : 'none';
+        if (arrow) arrow.textContent = isHidden ? '▼' : '▶';
+      });
+    }
 
     // 切换预设
     const sel = root.querySelector('#we-preset-select');

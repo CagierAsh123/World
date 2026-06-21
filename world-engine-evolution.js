@@ -633,11 +633,14 @@ type：${picked.type}
     // [MAP] 引擎预设覆写层：默认值用模块级 DEFAULT_SEG_*（单一真相源，逐字等于原模板），
     // 若当前激活预设对某段有自定义覆写则用覆写值，否则用默认值。
     // 激活「默认」预设（无任何覆写）时，4 个 Final 变量逐字等于原常量 → 拼装结果字节级等同 PR#12 现状。
+    // [PERF] 一次取 4 段覆写（getOverrides 在默认预设走 0-parse 快路径、自定义预设 1 次 parse），
+    // 避免每段分别查导致同一轮推演反复 JSON.parse 整个自定义预设数组。
     const _P = window.WORLD_ENGINE_PRESET;
-    const segEngineRole = (_P && typeof _P.getSegmentOverride === 'function' && _P.getSegmentOverride('engine-role')) || DEFAULT_SEG_ENGINE_ROLE;
-    const segCausalSteps = (_P && typeof _P.getSegmentOverride === 'function' && _P.getSegmentOverride('causal-steps')) || DEFAULT_SEG_CAUSAL_STEPS;
-    const segOutputInstructions = (_P && typeof _P.getSegmentOverride === 'function' && _P.getSegmentOverride('output-format')) || OUTPUT_INSTRUCTIONS;
-    const segJsonExample = (_P && typeof _P.getSegmentOverride === 'function' && _P.getSegmentOverride('json-example')) || JSON_EXAMPLE;
+    const _ov = (_P && typeof _P.getOverrides === 'function') ? _P.getOverrides() : null;
+    const segEngineRole = (_ov && _ov['engine-role']) || DEFAULT_SEG_ENGINE_ROLE;
+    const segCausalSteps = (_ov && _ov['causal-steps']) || DEFAULT_SEG_CAUSAL_STEPS;
+    const segOutputInstructions = (_ov && _ov['output-format']) || OUTPUT_INSTRUCTIONS;
+    const segJsonExample = (_ov && _ov['json-example']) || JSON_EXAMPLE;
 
     const segStateBlock = `## 当前世界状态（第${state.round}轮）\n${JSON.stringify({
   round: state.round,
