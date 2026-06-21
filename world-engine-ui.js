@@ -422,26 +422,66 @@ window.WORLD_ENGINE_UI = (function() {
     return '存档点 - ' + round + ' 轮 - ' + layer + ' 层';
   }
 
+  // [FIX] 选项卡定义：label + 包含哪些片段。仅归类现有 section，不新增/不删功能。
+  const SETTINGS_TABS = [
+    { key: 'common',    label: '常用' },
+    { key: 'advanced',  label: '高级' },
+    { key: 'archive',   label: '存档' },
+    { key: 'worldbook', label: '世界书' },
+    { key: 'debug',     label: '调试' }
+  ];
+  let _settingsTab = 'common';
+
   function renderSettingsView(checkpoint, cpLayer) {
     const cpContent = checkpoint
       ? renderCheckpointSections(checkpoint, cpLayer)
       : '<div class="we-empty">暂无存档点</div>';
-    return '<div class="we-sub-topbar">'
-      + '<button class="we-icon-btn" id="we-btn-back" title="返回"><i class="fa-solid fa-arrow-left"></i></button>'
-      + '<span class="we-sub-title">设置</span>'
-      + '</div>'
-      + renderSettingsForm()
-      + '<div class="we-section" style="margin-top:16px;"><div class="we-section-title">' + sectionHeader(checkpointTitle(checkpoint, cpLayer), 'checkpoint-section') + '</div>' + sectionBody('checkpoint-section', cpContent) + '</div>'
-      + '<div class="we-settings-save-actions">'
-      + '<button class="we-btn" id="we-save-settings">保存设置</button>'
-      + '<button class="we-btn we-btn-danger" id="we-reset-world">重置世界</button>'
-      + '</div>'
-      + renderSettingsAfterCheckpoint()
-      + '<div class="we-section we-debug-section" style="margin-top:8px;">'
+    const form = renderSettingsForm();              // {api,evolve,backfill,filter,display,chatcache,inject}
+    const extra = renderSettingsAfterCheckpoint();  // {worldbook,data,tone}
+
+    // 存档点 section（原样，移入「存档」卡）
+    const checkpointSection = '<div class="we-section" style="margin-top:16px;"><div class="we-section-title">'
+      + sectionHeader(checkpointTitle(checkpoint, cpLayer), 'checkpoint-section') + '</div>'
+      + sectionBody('checkpoint-section', cpContent) + '</div>';
+
+    // 调试 section（原样，含诊断包按钮 + renderDebug，移入「调试」卡）
+    const debugSection = '<div class="we-section we-debug-section">'
       + '<div class="we-section-title"><span class="we-debug-toggle" title="展开或收起调试信息"><span class="we-toggle-arrow">▶</span>调试</span></div>'
       + '<div id="we-debug-body" style="display:none;">'
       + '<button class="we-btn" id="we-export-diag" style="width:100%;margin-bottom:8px;">导出诊断包</button><!-- [FIX] 诊断包：与是否已推演无关，始终可导出 -->'
       + renderDebug() + '</div></div>';
+
+    // 各选项卡承载的片段（每个 section 恰好出现一次，零重复）
+    const panelContent = {
+      common:    form.api + form.evolve + form.inject,
+      advanced:  form.backfill + form.filter + form.display + extra.tone,
+      archive:   form.chatcache + extra.data + checkpointSection,
+      worldbook: extra.worldbook,
+      debug:     debugSection
+    };
+
+    const tabBar = '<div class="we-settings-tabs">'
+      + SETTINGS_TABS.map(t =>
+          '<button class="we-settings-tab' + (t.key === _settingsTab ? ' we-settings-tab--active' : '')
+          + '" data-tab="' + t.key + '">' + t.label + '</button>').join('')
+      + '</div>';
+
+    const panels = SETTINGS_TABS.map(t =>
+      '<div class="we-settings-panel" data-tab="' + t.key + '"'
+      + (t.key === _settingsTab ? '' : ' style="display:none;"') + '>'
+      + (panelContent[t.key] || '') + '</div>').join('');
+
+    return '<div class="we-sub-topbar">'
+      + '<button class="we-icon-btn" id="we-btn-back" title="返回"><i class="fa-solid fa-arrow-left"></i></button>'
+      + '<span class="we-sub-title">设置</span>'
+      + '</div>'
+      + tabBar
+      + panels
+      // 保存/重置：底部常驻（sticky），任何选项卡都能一键保存全部设置
+      + '<div class="we-settings-save-actions we-settings-save-sticky">'
+      + '<button class="we-btn" id="we-save-settings">保存设置</button>'
+      + '<button class="we-btn we-btn-danger" id="we-reset-world">重置世界</button>'
+      + '</div>';
   }
 
   function renderCheckpointSections(s, layer) {
@@ -1462,13 +1502,17 @@ window.WORLD_ENGINE_UI = (function() {
         <button class="we-btn" id="we-backfill-stop">■ 停止</button>
       </div>`;
 
-    return sec('set-api', 'API 配置', apiBody)
-      + sec('set-evolve', '推演模式', evolveBody)
-      + sec('set-backfill', '批量重填世界推演', backfillBody)
-      + sec('set-filter', '输入输出过滤器', filterBody)
-      + sec('set-display', '界面显示', displayBody)
-      + sec('set-chatcache', '酒馆缓存与存档', chatcacheBody)
-      + sec('set-inject', '正文注入', injectBody);
+    // [FIX] 选项卡化：返回按 section 分好的片段字典，由 renderSettingsView 归入各选项卡。
+    //   每个 sec(...) 调用、body 内容、字段 id 与原先一字不改，只是不再直接拼成一串。
+    return {
+      api: sec('set-api', 'API 配置', apiBody),
+      evolve: sec('set-evolve', '推演模式', evolveBody),
+      backfill: sec('set-backfill', '批量重填世界推演', backfillBody),
+      filter: sec('set-filter', '输入输出过滤器', filterBody),
+      display: sec('set-display', '界面显示', displayBody),
+      chatcache: sec('set-chatcache', '酒馆缓存与存档', chatcacheBody),
+      inject: sec('set-inject', '正文注入', injectBody)
+    };
   }
 
   function renderSettingsAfterCheckpoint() {
@@ -1510,9 +1554,12 @@ window.WORLD_ENGINE_UI = (function() {
         <input type="file" id="we-tone-file" accept=".txt" style="display:none;">
       </div>
       <div class="we-hint" id="we-tone-status" style="margin-top:6px;"></div>`;
-    return sec('set-worldbook', '后台推演世界书', worldbookBody)
-      + sec('set-data', '数据导入/导出', dataBody)
-      + sec('set-tone', '附加提示词', toneBody);
+    // [FIX] 选项卡化：同样返回片段字典
+    return {
+      worldbook: sec('set-worldbook', '后台推演世界书', worldbookBody),
+      data: sec('set-data', '数据导入/导出', dataBody),
+      tone: sec('set-tone', '附加提示词', toneBody)
+    };
   }
 
   function bindEvents(state) {
@@ -2116,6 +2163,18 @@ window.WORLD_ENGINE_UI = (function() {
         const arrow = document.getElementById('we-section-arrow-' + sectionId);
         if (body) body.style.display = sectionCollapsed[sectionId] ? 'none' : '';
         if (arrow) arrow.textContent = sectionCollapsed[sectionId] ? '▶' : '▼';
+      };
+    });
+
+    // [FIX] 设置页选项卡切换：纯 CSS 显隐，不重新渲染（保护输入内容 + 字段常驻 DOM 保证保存不丢）
+    document.querySelectorAll('.we-settings-tab').forEach(tab => {
+      tab.onclick = () => {
+        const key = tab.dataset.tab;
+        _settingsTab = key;
+        document.querySelectorAll('.we-settings-tab').forEach(t =>
+          t.classList.toggle('we-settings-tab--active', t.dataset.tab === key));
+        document.querySelectorAll('.we-settings-panel').forEach(p =>
+          p.style.display = (p.dataset.tab === key) ? '' : 'none');
       };
     });
 
