@@ -423,6 +423,11 @@
 
       async function onChatLoaded() {
         clearAutoEvolveTimer();
+        // 切聊天时，若仍有进行中的推演/批量回填，立即中止——
+        // 回填捕获的是旧聊天的对话数组引用，继续跑会把旧聊天内容写进新聊天（跨聊天污染 + 旧存档已 clearState 丢失）。
+        if (evolution && evolution.isRunning && evolution.isRunning()) {
+          try { evolution.abort(); console.log('[世界引擎] 切聊天，中止进行中的推演/回填'); } catch (e) { console.warn('[世界引擎] 中止推演失败', e); }
+        }
         // 酒馆缓存：切聊天时先做实时同步的恢复/收敛（须在读取本地状态之前，本地才拿到云端较新存档）
         if (window.WORLD_ENGINE_CHATCACHE) {
           try { window.WORLD_ENGINE_CHATCACHE.onChatLoaded(); } catch (e) { console.warn('[世界引擎] 酒馆缓存恢复失败', e); }

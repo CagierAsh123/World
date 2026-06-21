@@ -99,6 +99,36 @@ window.WORLD_ENGINE_CHATCACHE = (function() {
     return data;
   }
 
+  // 逐 slot 比较两份 pack 是否相同。slot 值都是字符串，直接 === 比对，避免 JSON.stringify 双向序列化。
+  // 用于 live 内容去重（无变化不推聊天）与自动备份去重比对。
+  function sameData(a, b) {
+    if (a === b) return true;
+    if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
+    const ka = Object.keys(a), kb = Object.keys(b);
+    if (ka.length !== kb.length) return false;
+    for (const k of ka) if (a[k] !== b[k]) return false;
+    return true;
+  }
+
+  // 估算 namespace 序列化后字节数：data 本就是字符串，累加各 slot 长度即可，
+  // 避免每次 writeNamespace 都把整份 ns（最多 ~24 份完整状态）JSON.stringify 仅为取 .length 做软告警。
+  function nsSize(ns) {
+    let n = 0;
+    if (ns.live && ns.live.data) {
+      const d = ns.live.data;
+      for (const k in d) n += (d[k] || '').length;
+      n += 64; // live 元数据（rev/updatedAt/chatId）开销
+    }
+    if (Array.isArray(ns.snapshots)) {
+      for (const s of ns.snapshots) {
+        const d = s && s.data;
+        if (d) for (const k in d) n += (d[k] || '').length;
+        n += 80; // snapshot 元数据开销
+      }
+    }
+    return n;
+  }
+
   // 把一份 pack 安装回 store；exact=true 时删除 pack 里不存在的 slot（精确还原）
   function installPack(data, id, exact) {
     data = data || {};
@@ -136,6 +166,7 @@ window.WORLD_ENGINE_CHATCACHE = (function() {
     ns.v = SCHEMA_VERSION;
     if (!ns.live) ns.live = null;
     if (!Array.isArray(ns.snapshots)) ns.snapshots = [];
+    pruneSnapshots(ns); // 升级后旧条数可能超过现 limit，即时收敛（堵住"仅在下一次 addSnapshot 才 prune"的迁移缺口）
     return ns;
   }
 
@@ -144,7 +175,7 @@ window.WORLD_ENGINE_CHATCACHE = (function() {
     const ctx = getCtx();
     if (!ctx || !chatUsable(ctx)) return false;
     try {
-      const size = JSON.stringify(ns).length;
+      const size = nsSize(ns);
       if (size > SIZE_WARN_BYTES) {
         console.warn(`[世界引擎] 酒馆缓存体积偏大（约 ${(size / 1024).toFixed(0)}KB），可能拖慢聊天保存，建议减少存档条数。`);
       }
@@ -178,8 +209,11 @@ window.WORLD_ENGINE_CHATCACHE = (function() {
   }
 
   // 把本地工作区作为 live 推上聊天，修订号 +1（用于：开启同步播种、本地较新收敛、恢复后置顶）
+  // force=true 时无条件推送（恢复存档后即使内容相同也要把 live 指向恢复后的状态）；
+  // 否则当新打包内容与 ns.live.data 完全一致时，返回当前 rev 不 +1、不写盘——
+  // 避免无变化的 slot 写入也触发一次整份聊天文件保存（升级后高频卡顿的主因之一）。
   // 返回：带 nsArg 时返回新 rev（或 null 表示未推）；不带 nsArg 时返回 true/false。
-  function pushLiveNow(nsArg) {
+  function pushLiveNow(nsArg, force) {
     const ctx = getCtx();
     if (!ctx || !chatUsable(ctx)) return nsArg ? null : false;
     const id = ctx.chatId;
@@ -188,6 +222,11 @@ window.WORLD_ENGINE_CHATCACHE = (function() {
     // 否则「丢了本地数据的设备」一旦先开同步，就会把别处真实存档清空（exact 安装会删 slot）。
     if (Object.keys(data).length === 0) return nsArg ? null : false;
     const ns = nsArg || ensureNamespace();
+    // 内容去重：无变化时不推送、不 bump rev（force 除外）
+    if (!force && ns.live && ns.live.chatId === id && sameData(ns.live.data, data)) {
+      const curRev = (ns.live && ns.live.rev) || localRev(id);
+      return nsArg ? curRev : true;
+    }
     const rev = Math.max(localRev(id), (ns.live && ns.live.rev) || 0) + 1;
     ns.live = { rev, updatedAt: Date.now(), chatId: id, data };
     if (nsArg) return rev; // 调用方负责 writeNamespace + setLocalRev
@@ -215,8 +254,9 @@ window.WORLD_ENGINE_CHATCACHE = (function() {
     let revToSet = null;
 
     if (syncEnabled()) {
-      const r = pushLiveNow(ns); // 只改 ns，不落盘；空内容会返回 null（见护栏）
-      if (r != null) { revToSet = r; changed = true; }
+      const prevRev = (ns.live && ns.live.rev) || 0;
+      const r = pushLiveNow(ns, false); // 内容去重：无变化时返回当前 rev、不更新 ns.live
+      if (r != null && r !== prevRev) { revToSet = r; changed = true; }
     }
     if (autoBackupEnabled() && addAutoBackupIfAdvanced(ns, id)) {
       changed = true;
@@ -236,6 +276,8 @@ window.WORLD_ENGINE_CHATCACHE = (function() {
   // ========== 聊天加载：实时同步的恢复 / 收敛 ==========
 
   function onChatLoaded() {
+    // 丢弃上一个聊天遗留的 pending tick，避免它在 B 上下文意外写盘 / 生成自动备份
+    if (_tickTimer) { clearTimeout(_tickTimer); _tickTimer = null; }
     const ctx = getCtx();
     if (!ctx || !chatUsable(ctx)) return;
     const id = ctx.chatId;
@@ -290,7 +332,7 @@ window.WORLD_ENGINE_CHATCACHE = (function() {
     if (_lastAutoRound != null && round <= _lastAutoRound) return false;
     const packed = packChat(id);
     const newestAuto = ns.snapshots.find(s => s.auto);
-    if (newestAuto && JSON.stringify(newestAuto.data) === JSON.stringify(packed)) {
+    if (newestAuto && sameData(newestAuto.data, packed)) {
       _lastAutoRound = round; // 与最新自动备份内容相同 → 跳过，但更新基线
       return false;
     }
@@ -338,7 +380,7 @@ window.WORLD_ENGINE_CHATCACHE = (function() {
     normalizeAfterRestore(id); // 楼层/指纹归一化到当前层数，避免被误判为重 roll（与「数据导入」一致）
     // 在同一个 ns 上更新 live（指向恢复后的状态），最后只落盘一次，避免两次 writeNamespace 互相覆盖
     let revToSet = null;
-    if (syncEnabled()) revToSet = pushLiveNow(ns); // 让本设备成为最新，避免下次 onChatLoaded 又被云端旧值覆盖
+    if (syncEnabled()) revToSet = pushLiveNow(ns, true); // force：恢复后即使内容相同也要把 live 指向恢复后的状态，避免下次 onChatLoaded 被云端旧值覆盖
     if (writeNamespace(ns) && revToSet != null) setLocalRev(id, revToSet);
     return true;
   }

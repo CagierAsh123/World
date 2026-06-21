@@ -929,8 +929,6 @@ ${extraInstruction ? '\n' + extraInstruction : ''}${toneSection}`;
         console.log('[世界引擎] ✅ 推演完成（重roll），轮次不变');
       }
       core.saveStateWithLayer(state);
-      _abortController = null;
-      _isRunning = false;
       return true;
 
     } catch(e) {
@@ -941,11 +939,14 @@ ${extraInstruction ? '\n' + extraInstruction : ''}${toneSection}`;
         console.error('[世界引擎] 推演失败', e);
         _lastError = e && e.message ? e.message : '未知错误';
       }
-      Object.assign(state, backup);
-      core.saveState(state);
+      // 恢复前状态；恢复语句本身可能抛错（如 IDB 在内存压力下写失败），吞掉以免跳过 finally 复位
+      try { Object.assign(state, backup); core.saveState(state); } catch (_) {}
+      return false;
+    } finally {
+      // 无论成功/失败/恢复语句抛错，都复位并发控制标志；否则后续 evolve 会被 isRunning() 守卫永久跳过
+      // （即升级后内存压力下偶发"推演再也不工作了"的症状）
       _abortController = null;
       _isRunning = false;
-      return false;
     }
   }
 
@@ -985,9 +986,11 @@ ${extraInstruction ? '\n' + extraInstruction : ''}${toneSection}`;
 
     // 1) 收集所有有效 AI 楼层在 chat 中的下标（与自动推演判据一致：非 user、mes 非空）
     let chat = [];
+    let startChatId = 'default';
     try {
       const ctx = SillyTavern.getContext();
       chat = (ctx && ctx.chat) || [];
+      if (ctx && ctx.chatId) startChatId = ctx.chatId;
     } catch (e) { chat = []; }
     const aiIdx = [];
     for (let i = 0; i < chat.length; i++) {
@@ -1034,6 +1037,12 @@ ${extraInstruction ? '\n' + extraInstruction : ''}${toneSection}`;
           console.log('[世界引擎] 🛑 批量回填已中止，停在第', b, '/', totalBatches, '批');
           return { done: false, reason: 'aborted', totalBatches, completedBatches, failedAt: b + 1 };
         }
+        // 切聊天守卫：回填进行中用户切到别的聊天 → 立即中止，绝不往 B 写。
+        // 否则开头 clearState() 已清空 A，而后续读写用动态 chatId 落到 B，会污染 B 并丢 A 存档。
+        if (core.getChatId() !== startChatId) {
+          console.warn('[世界引擎] 🛑 检测到切聊天，中止批量回填（start', startChatId, '→ now', core.getChatId(), '）');
+          return { done: false, reason: 'chat-changed', totalBatches, completedBatches, failedAt: b + 1 };
+        }
         const { pStart, pEnd } = batches[b];
         const lastChatIdx = aiIdx[pEnd];
         const startChatIdx = pStart === 0 ? 0 : aiIdx[pStart - 1] + 1;
@@ -1054,6 +1063,11 @@ ${extraInstruction ? '\n' + extraInstruction : ''}${toneSection}`;
         for (let attempt = 0; attempt <= retries; attempt++) {
           lastAttempt = attempt;
           if (_backfillAborted) break;
+          // 每批/每次重试前都校验 chatId：await api.callApi 有数秒空窗，用户极可能在此切聊天
+          if (core.getChatId() !== startChatId) {
+            console.warn('[世界引擎] 🛑 检测到切聊天，中止批量回填（start', startChatId, '→ now', core.getChatId(), '）');
+            return { done: false, reason: 'chat-changed', totalBatches, completedBatches, failedAt: b + 1 };
+          }
           const state = core.loadState();
           ok = await evolve(state, '', aiMsg, { mode: 'forward', dialogueText });
           if (ok) break;
