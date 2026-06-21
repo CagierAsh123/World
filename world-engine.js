@@ -13,6 +13,7 @@
     'world-engine-ledger.js',
     'world-engine-evolution.js',
     'world-engine-inject.js',
+    'world-engine-diag.js',
     'world-engine-ui.js'
   ];
 

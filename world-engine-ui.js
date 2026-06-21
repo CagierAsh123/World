@@ -439,7 +439,9 @@ window.WORLD_ENGINE_UI = (function() {
       + renderSettingsAfterCheckpoint()
       + '<div class="we-section we-debug-section" style="margin-top:8px;">'
       + '<div class="we-section-title"><span class="we-debug-toggle" title="展开或收起调试信息"><span class="we-toggle-arrow">▶</span>调试</span></div>'
-      + '<div id="we-debug-body" style="display:none;">' + renderDebug() + '</div></div>';
+      + '<div id="we-debug-body" style="display:none;">'
+      + '<button class="we-btn" id="we-export-diag" style="width:100%;margin-bottom:8px;">导出诊断包</button><!-- [FIX] 诊断包：与是否已推演无关，始终可导出 -->'
+      + renderDebug() + '</div></div>';
   }
 
   function renderCheckpointSections(s, layer) {
@@ -2792,6 +2794,21 @@ window.WORLD_ENGINE_UI = (function() {
         if (!dbg.rawResult) { showToast('无 API 返回可导出', true); return; }
         setupDownload(dbg.rawResult, 'api-raw-' + Date.now() + '.txt');
         showToast('API 返回已导出');
+      };
+    }
+
+    // [FIX] 导出诊断包
+    const exportDiagBtn = document.getElementById('we-export-diag');
+    if (exportDiagBtn) {
+      exportDiagBtn.onclick = () => {
+        const diag = window.WORLD_ENGINE_DIAG;
+        if (!diag || !diag.download) { showToast('诊断模块不可用', true); return; }
+        try {
+          diag.download();
+          showToast('诊断包已导出');
+        } catch (e) {
+          showToast('诊断包导出失败: ' + (e && e.message || e), true);
+        }
       };
     }
   }
