@@ -427,8 +427,7 @@ window.WORLD_ENGINE_UI = (function() {
   //   date    —— 可选，日期不确定的留月份/年份；
   //   items   —— 该版本改动条目（每条一行，渲染时走 h() 转义）。
   const CHANGELOG = [
-    { version: '2.3.13', date: '2026-06-22', items: ['新增「关于」选项卡：内置更新日志，可按版本查看历次改动'] },
-    { version: '2.3.12', date: '2026-06-22', items: ['正则过滤「简单模式」：勾选标签自动生成删除正则'] },
+    { version: '2.3.12', date: '2026-06-22', items: ['新增「关于」选项卡：内置更新日志，可下拉选择版本查看历次改动', '正则过滤「简单模式」：勾选标签自动生成删除正则'] },
     { version: '2.3.11', date: '2026-06-22', items: ['正则过滤支持 /pattern/flags 写法、保存时校验、新增测试按钮'] },
     { version: '2.3.10', date: '2026-06-21', items: ['引擎预设系统代码审查修复（性能与卡顿）', '诊断包补采预设系统与 prompt 分段'] },
     { version: '2.3.9',  date: '2026-06',    items: ['引擎预设系统：推演 prompt 硬编码段可编辑、可保存、可切换'] },
@@ -511,18 +510,21 @@ window.WORLD_ENGINE_UI = (function() {
       + '</div>';
   }
 
-  // 「关于」选项卡：当前版本徽标 + 更新日志（版本选择条 + 每版本独立面板，纯 CSS 显隐切换）。
-  //   数据来自 CHANGELOG 常量（与渲染解耦）；默认选中第一项（最新版）。
+  // 「关于」选项卡：当前版本徽标 + 更新日志（下拉选择版本 + 每版本独立面板，纯 CSS 显隐切换）。
+  //   数据来自 CHANGELOG 常量（与渲染解耦）；版本下拉复用 #we-preset-select 范式——
+  //   点击弹出原生可滚动列表，版本再多也不撑爆布局。默认选中第一项（最新版）。
   function renderAbout() {
     if (!CHANGELOG.length) return '<div class="we-empty">暂无更新日志</div>';
     const cur = window.WORLD_ENGINE_VERSION;
     const curBadge = cur ? '<span class="we-changelog-cur">当前版本 v' + h(cur) + '</span>' : '';
 
-    const verBar = '<div class="we-changelog-vers">'
-      + CHANGELOG.map(function (c, i) {
-          return '<button class="we-changelog-ver' + (i === 0 ? ' we-changelog-ver--active' : '')
-            + '" data-ver="' + h(c.version) + '">v' + h(c.version) + '</button>';
-        }).join('')
+    const optHtml = CHANGELOG.map(function (c, i) {
+      const label = 'v' + c.version + (c.date ? '（' + c.date + '）' : '');
+      return '<option value="' + h(c.version) + '"' + (i === 0 ? ' selected' : '') + '>' + h(label) + '</option>';
+    }).join('');
+    const verBar = '<div class="we-changelog-row">'
+      + '<label class="we-changelog-row-label">查看版本</label>'
+      + '<select id="we-changelog-select" class="we-changelog-select">' + optHtml + '</select>'
       + '</div>';
 
     const panels = CHANGELOG.map(function (c, i) {
@@ -2605,16 +2607,16 @@ window.WORLD_ENGINE_UI = (function() {
       };
     });
 
-    // 「关于」卡内的版本选择条切换：复刻 settings-tab 范式（纯 CSS 显隐、不重渲染、不触碰其它 tab）。
-    document.querySelectorAll('.we-changelog-ver').forEach(btn => {
-      btn.onclick = () => {
-        const ver = btn.dataset.ver;
-        document.querySelectorAll('.we-changelog-ver').forEach(b =>
-          b.classList.toggle('we-changelog-ver--active', b.dataset.ver === ver));
+    // 「关于」卡内的版本下拉切换：复用 #we-preset-select 范式（点击弹出原生可滚动列表）。
+    //   纯 CSS 显隐、不重渲染、不触碰其它 tab。
+    const clSel = document.getElementById('we-changelog-select');
+    if (clSel) {
+      clSel.onchange = () => {
+        const ver = clSel.value;
         document.querySelectorAll('.we-changelog-panel').forEach(p =>
           p.style.display = (p.dataset.ver === ver) ? '' : 'none');
       };
-    });
+    }
 
     const refreshBtn = document.getElementById('we-btn-refresh');
     if (refreshBtn) refreshBtn.onclick = () => refresh();
