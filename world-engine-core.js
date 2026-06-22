@@ -313,15 +313,67 @@ window.WORLD_ENGINE_CORE = (function() {
 
   // 输入输出过滤器：按 settings.evolveFilterRegex（每行一条正则）把匹配内容删掉。
   // 用于喂后台推演前清洗对话文本（思维链、状态栏、HTML 等）。
-  function filterDialogue(text, settings) {
+  //
+  // 每行一条正则，支持两种写法：
+  //   1. 纯 pattern（如 `ゐ<details>[\s\S]*?</details>`）—— 自动按 g 全局替换（向后兼容老写法）；
+  //   2. JS 字面量 `/pattern/flags`（如 `/<details>[\s\S]*?<\/details>/g`）—— 自动剥掉定界符取 flags，
+  //      flags 不含 g 则补 g（用户写 `/pat/` 或 `/pat/i` 都按全局删除语义执行）。
+  // 空行忽略；单条非法不抛错（生产路径静默），仅当调用方传 onError 时回调报告。
+
+  // 把一行文本剥成 {pattern, flags}。纯 pattern → flags 默认 'g'；/pat/flags 字面量 → 取其 flags 并保证 g。
+  function stripRegexLine(pat) {
+    const m = /^\/(.+)\/([a-z]*)$/i.exec(pat);
+    if (m) {
+      let flags = m[2] || '';
+      if (flags.indexOf('g') < 0) flags += 'g';
+      return { pattern: m[1], flags: flags };
+    }
+    return { pattern: pat, flags: 'g' };
+  }
+
+  // 纯校验：逐行解析 raw，返回 { ok, bad, entries }。不调 replace、无副作用。
+  //   ok      —— 合法条数
+  //   bad     —— [{ line: 1-based 行号, raw: 原始行文本(截断 60), reason: 错误消息 }]
+  //   entries —— [{ line, pattern, flags }] 合法条目（供测试按钮/诊断复用）
+  function validateFilterRegex(raw) {
+    const out = { ok: 0, bad: [], entries: [] };
+    if (!raw) return out;
+    const lines = String(raw).split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      const pat = lines[i].trim();
+      if (!pat) continue;
+      const lineNo = i + 1;
+      const stripped = stripRegexLine(pat);
+      try {
+        new RegExp(stripped.pattern, stripped.flags);   // 仅试编译，不 replace
+        out.ok++;
+        out.entries.push({ line: lineNo, pattern: stripped.pattern, flags: stripped.flags });
+      } catch (e) {
+        out.bad.push({ line: lineNo, raw: pat.slice(0, 60), reason: String(e && e.message || e) });
+      }
+    }
+    return out;
+  }
+
+  // 过滤对话文本。第三参 onError(lineNo, rawLine, reason) 可选——传入则在单条非法时回调（保存/测试用），
+  // 不传则静默（生产推演路径，绝不打断）。三处生产调用点均不传第三参，行为与旧版一致。
+  function filterDialogue(text, settings, onError) {
     if (!text) return text || '';
     const raw = (settings && settings.evolveFilterRegex) || '';
     if (!raw.trim()) return text;
+    const v = validateFilterRegex(raw);
     let out = text;
-    for (const line of raw.split('\n')) {
-      const pat = line.trim();
-      if (!pat) continue;
-      try { out = out.replace(new RegExp(pat, 'g'), ''); } catch (e) {}
+    for (let i = 0; i < v.entries.length; i++) {
+      const e = v.entries[i];
+      // validateFilterRegex 已试编译过，这里必然成功；保留 try 仅为防御性兜底
+      try { out = out.replace(new RegExp(e.pattern, e.flags), ''); } catch (err) { /* 不会进入 */ }
+    }
+    if (typeof onError === 'function' && v.bad.length) {
+      const lines = String(raw).split('\n');
+      for (let i = 0; i < v.bad.length; i++) {
+        const b = v.bad[i];
+        onError(b.line, lines[b.line - 1] || '', b.reason);
+      }
     }
     return out;
   }
@@ -569,6 +621,7 @@ window.WORLD_ENGINE_CORE = (function() {
     saveCheckpoint, restoreCheckpoint, clearCheckpoint, getAnchorLayer, setAnchorLayer,
     getChatLayer, getChatFingerprint, saveFingerprint, loadFingerprint, isNewRound,
     getCleanExport, importState,
-    cnToNum, parseStoryDay, getLastStoryDay, setLastStoryDay, filterDialogue
+    cnToNum, parseStoryDay, getLastStoryDay, setLastStoryDay, filterDialogue,
+    validateFilterRegex
   };
 })();

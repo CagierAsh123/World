@@ -217,6 +217,29 @@ window.WORLD_ENGINE_DIAG = (function() {
       };
     });
 
+    // —— 过滤正则诊断（复用 core.validateFilterRegex：支持 /pat/flags 与纯 pattern 两种写法）——
+    //   排错时无需猜测用户填的正则是否生效——这里逐行报出合法/非法条目与原因。
+    diag.filterRegex = safe(function () {
+      if (!core || !core.validateFilterRegex) return { error: 'core.validateFilterRegex 不可用' };
+      const s = (api && api.getSettings) ? api.getSettings(true) : {};
+      let raw = '';
+      try { raw = s && s.evolveFilterRegex ? String(s.evolveFilterRegex) : ''; } catch (e) { raw = ''; }
+      const v = core.validateFilterRegex(raw);
+      return {
+        rawTextLength: raw.length,
+        rawLineCount: raw ? raw.split('\n').length : 0,
+        nonEmptyCount: v.ok + v.bad.length,
+        validCount: v.ok,
+        invalidCount: v.bad.length,
+        // 非法条目原样报出原因；raw 已在 validateFilterRegex 内截断 60 字
+        invalidList: v.bad,
+        // 合法条目只报 line + flags（不重复 pattern，避免体积膨胀）
+        validList: v.entries.map(function (e) { return { line: e.line, flags: e.flags }; }),
+        // raw 预览截断 200，便于一眼看出用户填了什么
+        rawPreview: raw.slice(0, 200)
+      };
+    });
+
     return diag;
   }
 
