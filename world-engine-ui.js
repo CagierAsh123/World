@@ -1762,6 +1762,7 @@ window.WORLD_ENGINE_UI = (function() {
       <div class="we-input-group">
         <label>API URL（OpenAI 兼容）</label>
         <input type="text" id="we-api-url" value="${u(settings.apiUrl||'')}" placeholder="https://api.openai.com/v1">
+        <div style="font-size:11px;color:#888;margin-top:3px;">填到「版本前缀」一级即可，/chat/completions 可加可不加（会自动补）。例：OpenAI <span style="color:#aaa;">https://api.openai.com/v1</span>；火山方舟 <span style="color:#aaa;">https://ark.cn-beijing.volces.com/api/v3</span>（或 <span style="color:#aaa;">.../api/coding/v3</span>）。务必带上自己的版本前缀。</div>
       </div>
       <div class="we-input-group">
         <label>API Key</label>
