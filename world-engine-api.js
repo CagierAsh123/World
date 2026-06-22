@@ -44,12 +44,15 @@ window.WORLD_ENGINE_API = (function() {
     return cachedSettings;
   }
 
+  // [FIX] 规整 chat/completions URL：只补 /chat/completions，不再替用户塞 /v1 等版本前缀。
+  //   火山方舟等 OpenAI 兼容端点用自定义版本前缀（/api/v3、/api/coding/v3），旧逻辑会硬塞
+  //   /v1 把 URL 拼成 .../v3/v1/chat/completions 而全部 404。版本前缀由用户在设置里填到完整，
+  //   旁边有格式提示。三处调用点（getProxyBase / callApi / fetchModelList）语义一致受益。
   function normalizeUrl(url) {
     let u = url.trim().replace(/\/+$/, '');
     if (!u) return '';
     if (u.endsWith('/chat/completions')) return u;
-    if (u.endsWith('/v1')) return u + '/chat/completions';
-    return u + '/v1/chat/completions';
+    return u + '/chat/completions';
   }
 
   // [FIX] 经酒馆代理用：从完整的 chat/completions URL 还原出 base（形如 https://host/v1），
