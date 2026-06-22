@@ -2443,6 +2443,56 @@
   border-bottom-color: var(--we-gold);
 }
 .we-settings-panel { margin-bottom: 4px; }
+
+/* ===== 关于卡：更新日志 ===== */
+.we-changelog-top { margin-bottom: 8px; }
+.we-changelog-cur {
+  display: inline-block;
+  padding: 3px 10px;
+  border: 1px solid var(--we-gold);
+  border-radius: 12px;
+  color: var(--we-gold);
+  font-size: 12px;
+  font-weight: 600;
+}
+/* 版本下拉选择：复用 .we-preset-select 范式（点击弹出原生可滚动列表） */
+.we-changelog-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.we-changelog-row-label {
+  font-size: 12px; color: var(--we-text2); flex-shrink: 0;
+}
+.we-changelog-select {
+  flex: 1; padding: 5px 8px; font-size: 12px;
+  background: var(--we-bg2); color: var(--we-text);
+  border: 1px solid var(--we-border); border-radius: 6px;
+}
+.we-changelog-select:focus { outline: none; border-color: var(--we-accent); }
+.we-changelog-head {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--we-text);
+  margin-bottom: 6px;
+}
+.we-changelog-date {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--we-text3);
+  margin-left: 6px;
+}
+.we-changelog-items {
+  margin: 0;
+  padding-left: 18px;
+}
+.we-changelog-items li {
+  font-size: 12px;
+  color: var(--we-text2);
+  line-height: 1.7;
+}
+
 /* 保存条底部常驻 */
 .we-settings-save-sticky {
   position: sticky;
