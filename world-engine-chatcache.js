@@ -139,6 +139,10 @@ window.WORLD_ENGINE_CHATCACHE = (function() {
         if (Object.prototype.hasOwnProperty.call(data, name) && data[name] != null) {
           store().setItem(key, data[name]);
         } else if (exact) {
+          // [FIX] checkpoint/fingerprint 是自动推演的计数锚点，缺了会令 anchor 回退全空、触发死锁
+          //   （见 world-engine.js runAutoEvolution 的 anchor 兜底）。云端 live.data 缺这俩时，保留本地已有值，
+          //   不随 exact 删除；其余 slot（state/worldbook/anchorLayer）仍按精确还原语义删。
+          if (name === 'checkpoint' || name === 'fingerprint') continue;
           store().removeItem(key);
         }
       }
