@@ -1795,6 +1795,16 @@ window.WORLD_ENGINE_UI = (function() {
     const filterBody = `
       <div class="we-input-group">
         <label>每行一条正则，匹配内容会在喂后台前删除</label>
+        <div style="margin-bottom:8px;border:1px solid var(--we-border,#3a3a3a);border-radius:4px;padding:6px;">
+          <div style="font-size:12px;color:var(--we-text2);margin-bottom:4px;">简单模式：勾选标签自动生成删除正则</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:4px;">
+            <button class="we-btn" id="we-btn-filter-scan" type="button">🔍 扫描本聊天标签</button>
+            <input type="text" id="we-filter-add-input" placeholder="手动加标签名(如 tucao)" style="flex:1;min-width:140px;">
+            <button class="we-btn" id="we-btn-filter-add" type="button">+ 添加</button>
+          </div>
+          <div id="we-filter-tags" style="display:flex;flex-wrap:wrap;gap:4px;min-height:4px;"></div>
+          <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">自动生成的正则不一定生效——标签带属性(如 &lt;wlog time&gt;)、带 ~(如 &lt;konatan_planning~&gt;)、嵌套或闭标签异常时可能匹配失败。不生效请直接编辑下方文本框自行手写。未勾选标签不会保存。</div>
+        </div>
         <textarea id="we-filter-regex" rows="4" style="width:100%;resize:vertical;" placeholder="每行一条；支持纯 pattern 或 /pattern/flags 字面量。例：\n<details>[\\s\\S]*?</details>\\n?\n/&lt;think&gt;[\\s\\S]*?&lt;\\/think&gt;/g">${u(tv('evolveFilterRegex',''))}</textarea>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 4px;">
           <button class="we-btn" id="we-btn-filter-test" type="button">▶ 测试正则</button>
@@ -2598,6 +2608,142 @@ window.WORLD_ENGINE_UI = (function() {
         showToast(`已删除 ${removed} 处`);
       };
     }
+
+    // —— 正则过滤「简单模式」：勾选标签自动生成 <tag>[\s\S]*?</tag>\n? ——
+    // 解耦：底层仍是 #we-filter-regex 文本框(evolveFilterRegex 字段)为唯一真相源。
+    //   勾选 ↔ 文本框双向同步；非 <tag> 形式的行(用户手写杂项)原样保留，不进勾选清单。
+    // 反解析只认标准 <tag>...</tag> 形式；带 ~? / 带属性 / /pat/g / 纯 pattern 杂项 → 视为高级手写，保留。
+    const SIMPLE_TAG_LINE = /^<([a-zA-Z_][\w-]*)>[\s\S]*?<\/\1>(?:\\n\?)?$/;
+    const SCAN_TAG_RE = /<([a-zA-Z_][\w-]*)/g;
+
+    // 当前标签清单：{ name, checked }[]。无状态派生物，从 textarea 反解析 + 扫描/手动添加累积。
+    let _filterTags = [];
+
+    // 从 textarea 反解析出标准 <tag> 形式的勾选标签（非标准行视为高级手写，返回 tags + 保留的杂项行）
+    function parseTextareaTags(raw) {
+      const tags = [];
+      const advanced = [];
+      for (const line of String(raw || '').split('\n')) {
+        const m = line.match(SIMPLE_TAG_LINE);
+        if (m) { if (!tags.includes(m[1])) tags.push(m[1]); }
+        else if (line.trim()) advanced.push(line);
+      }
+      return { tags, advanced };
+    }
+
+    // 勾选标签 → 生成标准模板行；与高级手写行合并写回 textarea
+    function writeTextareaFromTags(checkedTags, advancedLines) {
+      const tagLines = checkedTags.map(t => `<${t}>[\\s\\S]*?</${t}>\\n?`);
+      const all = tagLines.concat(advancedLines);
+      const ta = document.getElementById('we-filter-regex');
+      if (ta) ta.value = all.join('\n');
+    }
+
+    // 渲染勾选清单 chip 列表
+    function renderFilterTags() {
+      const box = document.getElementById('we-filter-tags');
+      if (!box) return;
+      box.innerHTML = '';
+      for (const t of _filterTags) {
+        const chip = document.createElement('label');
+        chip.style.cssText = 'display:inline-flex;align-items:center;gap:3px;padding:2px 6px;border:1px solid var(--we-border,#3a3a3a);border-radius:3px;font-size:12px;cursor:pointer;';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox'; cb.checked = !!t.checked;
+        cb.onchange = () => {
+          t.checked = cb.checked;
+          syncTextareaFromTags();
+        };
+        const name = document.createElement('span'); name.textContent = t.name;
+        const del = document.createElement('span');
+        del.textContent = '✕'; del.style.cssText = 'color:var(--we-text3);cursor:pointer;margin-left:2px;';
+        del.onclick = (e) => { e.preventDefault(); _filterTags = _filterTags.filter(x => x.name !== t.name); renderFilterTags(); syncTextareaFromTags(); };
+        chip.appendChild(cb); chip.appendChild(name); chip.appendChild(del);
+        box.appendChild(chip);
+      }
+    }
+
+    // 勾选变化 → 写回 textarea（保留高级手写行）
+    function syncTextareaFromTags() {
+      const ta = document.getElementById('we-filter-regex');
+      const raw = ta ? ta.value : '';
+      const { advanced } = parseTextareaTags(raw);
+      const checked = _filterTags.filter(t => t.checked).map(t => t.name);
+      writeTextareaFromTags(checked, advanced);
+    }
+
+    // textarea 手改 → 反解析更新勾选清单（保留清单里已有的非标准标签的勾选态）
+    let _taSyncTimer = null;
+    function syncTagsFromTextarea() {
+      const ta = document.getElementById('we-filter-regex');
+      if (!ta) return;
+      const { tags } = parseTextareaTags(ta.value);
+      // tags 是 textarea 里标准 <tag> 行对应的标签名（视为已勾选）
+      const tagSet = new Set(tags);
+      // 已在清单里的：按 textarea 是否还认它更新 checked；不在清单里的标准标签：加进去（勾选）
+      for (const t of _filterTags) t.checked = tagSet.has(t.name);
+      for (const name of tags) {
+        if (!_filterTags.some(t => t.name === name)) _filterTags.push({ name, checked: true });
+      }
+      renderFilterTags();
+    }
+
+    // 扫描最新一条 AI 回复，提取其中出现的 <xxx 标签名
+    function scanTagsFromLastAI() {
+      let text = '';
+      try {
+        const ctx = SillyTavern.getContext();
+        const chat = (ctx && ctx.chat) || [];
+        for (let i = chat.length - 1; i >= 0; i--) {
+          const m = chat[i];
+          if (m && !m.is_user && String(m.mes || '').trim()) { text = String(m.mes); break; }
+        }
+      } catch (e) {}
+      if (!text) { showToast('未找到 AI 回复', true); return; }
+      const found = [];
+      let m;
+      SCAN_TAG_RE.lastIndex = 0;
+      while ((m = SCAN_TAG_RE.exec(text)) !== null) {
+        const name = m[1];
+        if (name && !found.includes(name)) found.push(name);
+      }
+      if (!found.length) { showToast('最新 AI 回复里没发现标签', true); return; }
+      // 合并进清单：已有的保留勾选态，新发现的默认勾选
+      for (const name of found) {
+        if (!_filterTags.some(t => t.name === name)) _filterTags.push({ name, checked: true });
+      }
+      renderFilterTags();
+      syncTextareaFromTags();
+      showToast(`扫描到 ${found.length} 个标签`);
+    }
+
+    // 绑定：扫描按钮
+    const scanBtn = document.getElementById('we-btn-filter-scan');
+    if (scanBtn) scanBtn.onclick = scanTagsFromLastAI;
+
+    // 绑定：手动添加
+    const addBtn = document.getElementById('we-btn-filter-add');
+    const addInput = document.getElementById('we-filter-add-input');
+    function doAddTag() {
+      const v = (addInput && addInput.value || '').trim();
+      if (!v) return;
+      if (!/^[a-zA-Z_][\w-]*$/.test(v)) { showToast('标签名无效（只允许字母数字下划线连字符）', true); return; }
+      if (!_filterTags.some(t => t.name === v)) _filterTags.push({ name: v, checked: true });
+      if (addInput) addInput.value = '';
+      renderFilterTags();
+      syncTextareaFromTags();
+    }
+    if (addBtn) addBtn.onclick = doAddTag;
+    if (addInput) addInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); doAddTag(); } });
+
+    // 绑定：textarea 手改 → 反解析更新勾选（防抖）
+    const filterTa = document.getElementById('we-filter-regex');
+    if (filterTa) filterTa.addEventListener('input', () => {
+      clearTimeout(_taSyncTimer);
+      _taSyncTimer = setTimeout(syncTagsFromTextarea, 300);
+    });
+
+    // 初始化：打开设置页时从已存字段反解析出勾选状态
+    syncTagsFromTextarea();
 
     const saveBtn = document.getElementById('we-save-settings');
     if (saveBtn) {
