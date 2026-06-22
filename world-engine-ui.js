@@ -422,13 +422,32 @@ window.WORLD_ENGINE_UI = (function() {
     return '存档点 - ' + round + ' 轮 - ' + layer + ' 层';
   }
 
+  // 更新日志（纯数据；与渲染解耦。新版本发布时在数组头部加一项即可）。
+  //   version —— 版本选择条按钮文案 + 与 manifest 当前版本高亮匹配；
+  //   date    —— 可选，日期不确定的留月份/年份；
+  //   items   —— 该版本改动条目（每条一行，渲染时走 h() 转义）。
+  const CHANGELOG = [
+    { version: '2.3.13', date: '2026-06-22', items: ['新增「关于」选项卡：内置更新日志，可按版本查看历次改动'] },
+    { version: '2.3.12', date: '2026-06-22', items: ['正则过滤「简单模式」：勾选标签自动生成删除正则'] },
+    { version: '2.3.11', date: '2026-06-22', items: ['正则过滤支持 /pattern/flags 写法、保存时校验、新增测试按钮'] },
+    { version: '2.3.10', date: '2026-06-21', items: ['引擎预设系统代码审查修复（性能与卡顿）', '诊断包补采预设系统与 prompt 分段'] },
+    { version: '2.3.9',  date: '2026-06',    items: ['引擎预设系统：推演 prompt 硬编码段可编辑、可保存、可切换'] },
+    { version: '2.3.8',  date: '2026-06',    items: ['推演 Prompt 全透明分段展示（只读）'] },
+    { version: '2.3.7',  date: '2026-06',    items: ['新增「经酒馆代理」连接方式，绕过第三方 API 的 CORS'] },
+    { version: '2.3.6',  date: '2026-06',    items: ['设置页选项卡化'] },
+    { version: '2.3.5',  date: '2026-06',    items: ['一键导出诊断包'] },
+    { version: '2.3.4',  date: '2026-06',    items: ['面板标题旁显示扩展版本号'] },
+    { version: '2.2.0',  date: '2026',       items: ['酒馆缓存与存档：跨设备同步 + 防丢失存档'] }
+  ];
+
   // [FIX] 选项卡定义：label + 包含哪些片段。仅归类现有 section，不新增/不删功能。
   const SETTINGS_TABS = [
     { key: 'common',    label: '常用' },
     { key: 'advanced',  label: '高级' },
     { key: 'archive',   label: '存档' },
     { key: 'worldbook', label: '世界书' },
-    { key: 'debug',     label: '调试' }
+    { key: 'debug',     label: '调试' },
+    { key: 'about',     label: '关于' }
   ];
   let _settingsTab = 'common';
 
@@ -464,7 +483,8 @@ window.WORLD_ENGINE_UI = (function() {
       advanced:  form.backfill + form.filter + form.display + extra.tone,
       archive:   form.chatcache + extra.data + checkpointSection,
       worldbook: extra.worldbook,
-      debug:     debugSection
+      debug:     debugSection,
+      about:     renderAbout()
     };
 
     const tabBar = '<div class="we-settings-tabs">'
@@ -488,6 +508,37 @@ window.WORLD_ENGINE_UI = (function() {
       + '<div class="we-settings-save-actions we-settings-save-sticky">'
       + '<button class="we-btn" id="we-save-settings">保存设置</button>'
       + '<button class="we-btn we-btn-danger" id="we-reset-world">重置世界</button>'
+      + '</div>';
+  }
+
+  // 「关于」选项卡：当前版本徽标 + 更新日志（版本选择条 + 每版本独立面板，纯 CSS 显隐切换）。
+  //   数据来自 CHANGELOG 常量（与渲染解耦）；默认选中第一项（最新版）。
+  function renderAbout() {
+    if (!CHANGELOG.length) return '<div class="we-empty">暂无更新日志</div>';
+    const cur = window.WORLD_ENGINE_VERSION;
+    const curBadge = cur ? '<span class="we-changelog-cur">当前版本 v' + h(cur) + '</span>' : '';
+
+    const verBar = '<div class="we-changelog-vers">'
+      + CHANGELOG.map(function (c, i) {
+          return '<button class="we-changelog-ver' + (i === 0 ? ' we-changelog-ver--active' : '')
+            + '" data-ver="' + h(c.version) + '">v' + h(c.version) + '</button>';
+        }).join('')
+      + '</div>';
+
+    const panels = CHANGELOG.map(function (c, i) {
+      const head = '<div class="we-changelog-head">v' + h(c.version)
+        + (c.date ? ' <span class="we-changelog-date">' + h(c.date) + '</span>' : '') + '</div>';
+      const items = '<ul class="we-changelog-items">'
+        + (c.items || []).map(function (it) { return '<li>' + h(it) + '</li>'; }).join('')
+        + '</ul>';
+      return '<div class="we-changelog-panel" data-ver="' + h(c.version) + '"'
+        + (i === 0 ? '' : ' style="display:none;"') + '>' + head + items + '</div>';
+    }).join('');
+
+    return '<div class="we-section">'
+      + '<div class="we-changelog-top">' + curBadge + '</div>'
+      + verBar
+      + panels
       + '</div>';
   }
 
@@ -2551,6 +2602,17 @@ window.WORLD_ENGINE_UI = (function() {
           p.style.display = (p.dataset.tab === key) ? '' : 'none');
         // [FIX] 切到调试 tab 时，局部刷新 renderDebug 拉最新一轮推演数据（不动其它 tab 输入）
         if (key === 'debug') { refreshDebugRender(); refreshPresetManage(); }
+      };
+    });
+
+    // 「关于」卡内的版本选择条切换：复刻 settings-tab 范式（纯 CSS 显隐、不重渲染、不触碰其它 tab）。
+    document.querySelectorAll('.we-changelog-ver').forEach(btn => {
+      btn.onclick = () => {
+        const ver = btn.dataset.ver;
+        document.querySelectorAll('.we-changelog-ver').forEach(b =>
+          b.classList.toggle('we-changelog-ver--active', b.dataset.ver === ver));
+        document.querySelectorAll('.we-changelog-panel').forEach(p =>
+          p.style.display = (p.dataset.ver === ver) ? '' : 'none');
       };
     });
 

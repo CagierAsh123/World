@@ -2443,6 +2443,66 @@
   border-bottom-color: var(--we-gold);
 }
 .we-settings-panel { margin-bottom: 4px; }
+
+/* ===== 关于卡：更新日志 ===== */
+.we-changelog-top { margin-bottom: 8px; }
+.we-changelog-cur {
+  display: inline-block;
+  padding: 3px 10px;
+  border: 1px solid var(--we-gold);
+  border-radius: 12px;
+  color: var(--we-gold);
+  font-size: 12px;
+  font-weight: 600;
+}
+/* 版本选择条：复用 settings-tabs 的横向滚动观感 */
+.we-changelog-vers {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+  scrollbar-width: none;
+}
+.we-changelog-vers::-webkit-scrollbar { display: none; }
+.we-changelog-ver {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  background: transparent;
+  border: 1px solid var(--we-border);
+  border-radius: 4px;
+  color: var(--we-text2);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.we-changelog-ver:hover { color: var(--we-text); }
+.we-changelog-ver--active {
+  color: var(--we-gold);
+  border-color: var(--we-gold);
+}
+.we-changelog-head {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--we-text);
+  margin-bottom: 6px;
+}
+.we-changelog-date {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--we-text3);
+  margin-left: 6px;
+}
+.we-changelog-items {
+  margin: 0;
+  padding-left: 18px;
+}
+.we-changelog-items li {
+  font-size: 12px;
+  color: var(--we-text2);
+  line-height: 1.7;
+}
+
 /* 保存条底部常驻 */
 .we-settings-save-sticky {
   position: sticky;
