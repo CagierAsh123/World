@@ -318,12 +318,15 @@
           let anchor = null;
           if (cp && cp.chatLayer != null) {
             anchor = Number(cp.chatLayer);
-          } else if (storedState && storedState.chatLayer != null) {
+          } else if (storedState && storedState.chatLayer != null && Number.isFinite(Number(storedState.chatLayer))) {
             anchor = Number(storedState.chatLayer);
           } else if (core.loadFingerprint() !== '') {
             anchor = Number(core.loadFingerprint());
           }
-          if (!Number.isFinite(anchor)) anchor = L;
+          // [FIX] 三级回退全空 = 该聊天从未推演过（空壳 state + 无存档点 + 无指纹）。
+          //   旧逻辑兜底 anchor=L 导致 c=0 永久死锁（见 onChatLoaded 对空壳 state 不再钉 chatLayer 的配套改动）；
+          //   改为认定从未推演，anchor=-1 让 c>0 触发首次推演。推演成功后 evolution 正常写 fingerprint，后续轮次走正常锚点。
+          if (!Number.isFinite(anchor)) anchor = -1;
           const c = Math.floor(Math.max(0, L - anchor) / 2);
           const doEvolve = c > 0 && c % everyX === 0;
 
@@ -454,7 +457,9 @@
         let storedState = null;
         if (core.hasState()) {
           storedState = core.loadState();
-          if (!Number.isFinite(Number(storedState.chatLayer))) {
+          // [FIX] 只对真正推演过的 state 补 chatLayer；空壳 state（round=0 且无 lastEvolveResult）保留 undefined，
+          //   让 runAutoEvolution 的 anchor 兜底走「从未推演」分支（anchor=-1），避免把 anchor 钉死在当前层导致死锁。
+          if (!Number.isFinite(Number(storedState.chatLayer)) && (storedState.round > 0 || storedState.lastEvolveResult)) {
             storedState.chatLayer = currentLayer;
             core.saveState(storedState);
           }
@@ -472,7 +477,13 @@
             (!storedState || Number(storedState.chatLayer) === currentLayer)) {
           core.saveFingerprint(String(currentLayer));
         }
-        if (chat.length > 0 && !core.restoreCheckpoint() && !core.hasState() && core.loadFingerprint() === '') {
+        // [FIX] fingerprint 补当前层 = 在此层建立锚点（已推演过的聊天在此建立，下次有新楼层才推）。
+        //   但空壳 state（round=0 且无 lastEvolveResult = 从未推演过）不能补成当前层——否则
+        //   runAutoEvolution 第三级命中 anchor=L、c=0、永久死锁。只有真推演过的 state 才补；
+        //   空壳 state 保留空指纹，让 auto 分支走「从未推演」兜底 anchor=-1 触发首次推演。
+        //   与上方空壳 state 不钉 chatLayer 同构（同以 round>0||lastEvolveResult 区分是否推演过）。
+        const reallyEvolved = storedState && (storedState.round > 0 || storedState.lastEvolveResult);
+        if (chat.length > 0 && !core.restoreCheckpoint() && reallyEvolved && core.loadFingerprint() === '') {
           core.saveFingerprint(String(currentLayer));
         }
         applyInjectionForCurrentRound();
