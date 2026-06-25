@@ -335,10 +335,8 @@
             anchor = Number(cp.chatLayer);
           } else if (storedState && storedState.chatLayer != null && Number.isFinite(Number(storedState.chatLayer))) {
             anchor = Number(storedState.chatLayer);
-          } else if (core.loadFingerprint() !== '') {
-            anchor = Number(core.loadFingerprint());
           }
-          // [FIX] 三级回退全空 = 该聊天从未推演过（空壳 state + 无存档点 + 无指纹）。
+          // 两级回退全空 = 该聊天从未推演过。
           //   旧逻辑兜底 anchor=L 导致 c=0 永久死锁（见 onChatLoaded 对空壳 state 不再钉 chatLayer 的配套改动）；
           //   改为认定从未推演，anchor=-1 让 c>0 触发首次推演。推演成功后 evolution 正常写 fingerprint，后续轮次走正常锚点。
           if (!Number.isFinite(anchor)) anchor = -1;
@@ -471,7 +469,6 @@
         if (chat.length === 0) {
           core.clearState();
           core.clearCheckpoint();
-          core.saveFingerprint(String(currentLayer));
         }
         let storedState = null;
         if (core.hasState()) {
@@ -490,26 +487,16 @@
             : currentLayer;
           core.saveCheckpoint(checkpoint);
         }
-        // 迁移旧版 fingerprint（旧语义为 chat.length）到统一层数（chat.length - 1）。
-        const savedFingerprint = Number(core.loadFingerprint());
-        if (Number.isFinite(savedFingerprint) && savedFingerprint === currentLayer + 1 &&
-            (!storedState || Number(storedState.chatLayer) === currentLayer)) {
-          core.saveFingerprint(String(currentLayer));
-        }
-        // [FIX] fingerprint 补当前层 = 在此层建立锚点（已推演过的聊天在此建立，下次有新楼层才推）。
-        //   但空壳 state（round=0 且无 lastEvolveResult = 从未推演过）不能补成当前层——否则
-        //   runAutoEvolution 第三级命中 anchor=L、c=0、永久死锁。只有真推演过的 state 才补；
-        //   空壳 state 保留空指纹，让 auto 分支走「从未推演」兜底 anchor=-1 触发首次推演。
-        //   与上方空壳 state 不钉 chatLayer 同构（同以 round>0||lastEvolveResult 区分是否推演过）。
         applyInjectionForCurrentRound();
-        const reallyEvolved = storedState && (storedState.round > 0 || storedState.lastEvolveResult);
-        if (chat.length > 0 && !core.restoreCheckpoint() && reallyEvolved && core.loadFingerprint() === '') {
-          core.saveFingerprint(String(currentLayer));
-        }
         console.log('[世界引擎] 聊天已加载，注入已更新');
       }
 
       function onMessageSwiped() {
+        clearAutoEvolveTimer();
+        applyInjectionForCurrentRound();
+      }
+
+      function onMessageDeleted() {
         clearAutoEvolveTimer();
         applyInjectionForCurrentRound();
       }
@@ -526,6 +513,7 @@
         ctx.eventSource.on(autoEvolveEvent, onMessageReceived);
         ctx.eventSource.on(ctx.event_types?.CHAT_LOADED || 'chat_loaded', onChatLoaded);
         ctx.eventSource.on(ctx.event_types?.MESSAGE_SWIPED || 'message_swiped', onMessageSwiped);
+        ctx.eventSource.on(ctx.event_types?.MESSAGE_DELETED || 'message_deleted', onMessageDeleted);
         ctx.eventSource.on(ctx.event_types?.GENERATION_STARTED || 'generation_started', onGenerationStarted);
         console.log('[世界引擎] 事件绑定成功，自动推演事件:', autoEvolveEvent);
       } else {
