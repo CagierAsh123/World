@@ -105,14 +105,14 @@
       const INJ_POSITION = 1;
       const INJ_DEPTH = 1;
 
-      function registerInjection(content) {
-        // 世界书注入：仅当设置开启 + 模块就绪时使用
+      async function registerInjection(content) {
+        // 世界书注入：await 确保写入完成再返回（swipe 时赶到扩展 prompt 之前）
         const useWorldbook = api.getSettings(true).injectIntoWorldbook !== false
                           && window.WORLD_ENGINE_BOOKINJECT;
         if (useWorldbook) {
-          window.WORLD_ENGINE_BOOKINJECT.inject(content);
+          await window.WORLD_ENGINE_BOOKINJECT.inject(content);
         }
-        // 退路：扩展 prompt 注入（世界书关闭时或世界书注入失败时）
+        // 退路：扩展 prompt 注入
         try {
           const ctx = SillyTavern.getContext();
           if (typeof ctx.setExtensionPrompt === 'function') {
@@ -158,7 +158,7 @@
 
       // ========== 注入世界状态到正文 prompt ==========
       // stateOverride: 传入则使用该状态（重 roll 时用存档点），否则用当前状态
-      function applyInjection(stateOverride) {
+      async function applyInjection(stateOverride) {
         try {
           if (api.getSettings(true).injectIntoPrompt === false) {
             unregisterInjection();
@@ -202,7 +202,7 @@
 
       // 正文组装前比较注入当下的对话层数和当前状态记录的层数：
       // 对话层数更小 = 重 roll，注入存档点；否则注入当前状态。
-      function applyInjectionForCurrentRound() {
+      async function applyInjectionForCurrentRound() {
         const state = core.loadState();
         const chatLayer = core.getChatLayer();
 
@@ -213,14 +213,14 @@
           if (checkpoint) {
             injectedScope = 'checkpoint';
             console.log(`[世界引擎] 正文注入判定：对话层数 ${chatLayer} < 当前状态层数 ${stateLayer}，注入存档点`);
-            applyInjection(checkpoint);
+            await applyInjection(checkpoint);
           } else {
             console.warn(`[世界引擎] 正文注入判定：对话层数 ${chatLayer} < 当前状态层数 ${stateLayer}，但无存档点，回退到当前状态`);
-            applyInjection();
+            await applyInjection();
           }
         } else {
           console.log(`[世界引擎] 正文注入判定：对话层数 ${chatLayer} >= 当前状态层数 ${stateLayer}，注入当前状态`);
-          applyInjection();
+          await applyInjection();
         }
         // 注入正文后刷新面板，让「当前状态」跟随实际注入的那份：
         // 重 roll（对话层数 < 状态层数）→ 显示存档点；否则 → 显示当前状态。
@@ -396,7 +396,7 @@
             ledger.recordChanges(state);
             if (storyDay != null) { state.time = Number(storyDay); core.saveState(state); }
             // 重 roll 时正文已按楼层注入存档点，推演完成后不覆盖
-            if (isNewRound) applyInjection();
+            if (isNewRound) await applyInjection();
             // 世界书注入刷新：推演完成后立即更新世界书条目
             if (api.getSettings(true).injectIntoWorldbook !== false && window.WORLD_ENGINE_BOOKINJECT) {
               try { window.WORLD_ENGINE_BOOKINJECT.refreshNow(); } catch (e) {}
