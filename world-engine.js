@@ -14,6 +14,7 @@
     'world-engine-ledger.js',
     'world-engine-evolution.js',
     'world-engine-inject.js',
+    'world-engine-bookinject.js',
     'world-engine-diag.js',
     'world-engine-ui.js'
   ];
@@ -68,6 +69,13 @@
         window.WORLD_ENGINE_CHATCACHE.init();
       }
 
+      // 世界书注入：初始化专用世界书与常量条目（不阻塞）
+      if (window.WORLD_ENGINE_BOOKINJECT) {
+        try { window.WORLD_ENGINE_BOOKINJECT.init(); } catch (e) { console.warn('[世界引擎] 世界书注入初始化失败（非致命）', e); }
+        // 监听 store 写入，UI 编辑后自动刷新世界书条目
+        try { window.WORLD_ENGINE_BOOKINJECT.installStoreListener(); } catch (e) {}
+      }
+
       const core = window.WORLD_ENGINE_CORE;
       const api = window.WORLD_ENGINE_API;
       const ledger = window.WORLD_ENGINE_LEDGER;
@@ -100,6 +108,11 @@
       const INJ_DEPTH = 1;
 
       function registerInjection(content) {
+        // 优先走世界书注入（绝对兼容黑科技）
+        if (window.WORLD_ENGINE_BOOKINJECT) {
+          window.WORLD_ENGINE_BOOKINJECT.inject(content);
+        }
+        // 退路：扩展 prompt 注入
         try {
           const ctx = SillyTavern.getContext();
           if (typeof ctx.setExtensionPrompt === 'function') {
@@ -121,19 +134,20 @@
             });
             return true;
           }
-          console.warn('[世界引擎] 所有注入方式均不可用');
-          return false;
-        } catch(e) {
-          console.error('[世界引擎] 注入失败', e);
-          return false;
-        }
+        } catch(e) {}
+        return false;
       }
 
       function unregisterInjection() {
+        // 世界书注入：移除内容
+        if (window.WORLD_ENGINE_BOOKINJECT) {
+          window.WORLD_ENGINE_BOOKINJECT.remove();
+        }
+        // 扩展 prompt：清空
         try {
           const ctx = SillyTavern.getContext();
           if (typeof ctx.setExtensionPrompt === 'function') {
-            ctx.setExtensionPrompt(INJECTION_NAME, '', INJ_POSITION, INJ_DEPTH); // 清空内容即为取消注入
+            ctx.setExtensionPrompt(INJECTION_NAME, '', INJ_POSITION, INJ_DEPTH);
           } else if (typeof ctx.unregisterInjection === 'function') {
             ctx.unregisterInjection(INJECTION_NAME);
           } else if (Array.isArray(ctx.extensionPrompts)) {
@@ -397,6 +411,10 @@
             if (storyDay != null) { state.time = Number(storyDay); core.saveState(state); }
             // 重 roll 时正文已按楼层注入存档点，推演完成后不覆盖
             if (isNewRound) applyInjection();
+            // 世界书注入刷新：推演完成后立即更新世界书条目
+            if (window.WORLD_ENGINE_BOOKINJECT) {
+              try { window.WORLD_ENGINE_BOOKINJECT.refreshNow(); } catch (e) {}
+            }
             console.log('[世界引擎] ✅ 推演完成，当前第', state.round, '轮');
           } else {
             console.warn('[世界引擎] ⚠️ 推演失败或已中止');
@@ -497,11 +515,11 @@
         //   runAutoEvolution 第三级命中 anchor=L、c=0、永久死锁。只有真推演过的 state 才补；
         //   空壳 state 保留空指纹，让 auto 分支走「从未推演」兜底 anchor=-1 触发首次推演。
         //   与上方空壳 state 不钉 chatLayer 同构（同以 round>0||lastEvolveResult 区分是否推演过）。
+        applyInjectionForCurrentRound();
         const reallyEvolved = storedState && (storedState.round > 0 || storedState.lastEvolveResult);
         if (chat.length > 0 && !core.restoreCheckpoint() && reallyEvolved && core.loadFingerprint() === '') {
           core.saveFingerprint(String(currentLayer));
         }
-        applyInjectionForCurrentRound();
         console.log('[世界引擎] 聊天已加载，注入已更新');
       }
 
