@@ -1876,6 +1876,11 @@ window.WORLD_ENGINE_UI = (function() {
           注入正文
         </label>
         <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">关闭后不会将当前状态或存档点注入聊天正文。</div>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:8px;">
+          <input type="checkbox" id="we-inject-into-worldbook" ${settings.injectIntoWorldbook !== false ? 'checked' : ''}>
+          注入世界书
+        </label>
+        <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">创建聊天世界书「🌍 世界引擎·实时注入」并写入世界状态（与黑科技同策略，绝对兼容）。关闭则回退扩展 prompt 注入。</div>
       </div>`;
 
     const displayMode = settings.displayMode === 'expand' ? 'expand' : 'mask';
@@ -2824,6 +2829,7 @@ window.WORLD_ENGINE_UI = (function() {
           model: document.getElementById('we-model')?.value || 'gpt-3.5-turbo',
           connectionMode: document.getElementById('we-connection-mode')?.value === 'proxy' ? 'proxy' : 'direct',
           injectIntoPrompt: document.getElementById('we-inject-into-prompt')?.checked !== false,
+          injectIntoWorldbook: document.getElementById('we-inject-into-worldbook')?.checked !== false,
           syncToChat: document.getElementById('we-sync-to-chat')?.checked === true,
           autoBackup: document.getElementById('we-auto-backup')?.checked === true,
           evolveMode: (_modeRaw === 'manual' || _modeRaw === 'time') ? _modeRaw : 'auto',
@@ -3153,7 +3159,8 @@ window.WORLD_ENGINE_UI = (function() {
           apiKey: document.getElementById('we-api-key')?.value || '',
           model: document.getElementById('we-model')?.value || '',
           connectionMode: document.getElementById('we-connection-mode')?.value === 'proxy' ? 'proxy' : 'direct',
-          injectIntoPrompt: document.getElementById('we-inject-into-prompt')?.checked !== false
+          injectIntoPrompt: document.getElementById('we-inject-into-prompt')?.checked !== false,
+          injectIntoWorldbook: document.getElementById('we-inject-into-worldbook')?.checked !== false
         }));
         if (api.getSettings) api.getSettings(true);
         fetchBtn.disabled = true;

@@ -108,11 +108,13 @@
       const INJ_DEPTH = 1;
 
       function registerInjection(content) {
-        // 优先走世界书注入（绝对兼容黑科技）
-        if (window.WORLD_ENGINE_BOOKINJECT) {
+        // 世界书注入：仅当设置开启 + 模块就绪时使用
+        const useWorldbook = api.getSettings(true).injectIntoWorldbook !== false
+                          && window.WORLD_ENGINE_BOOKINJECT;
+        if (useWorldbook) {
           window.WORLD_ENGINE_BOOKINJECT.inject(content);
         }
-        // 退路：扩展 prompt 注入
+        // 退路：扩展 prompt 注入（世界书关闭时或世界书注入失败时）
         try {
           const ctx = SillyTavern.getContext();
           if (typeof ctx.setExtensionPrompt === 'function') {
@@ -140,7 +142,7 @@
 
       function unregisterInjection() {
         // 世界书注入：移除内容
-        if (window.WORLD_ENGINE_BOOKINJECT) {
+        if (api.getSettings(true).injectIntoWorldbook !== false && window.WORLD_ENGINE_BOOKINJECT) {
           window.WORLD_ENGINE_BOOKINJECT.remove();
         }
         // 扩展 prompt：清空
@@ -412,7 +414,7 @@
             // 重 roll 时正文已按楼层注入存档点，推演完成后不覆盖
             if (isNewRound) applyInjection();
             // 世界书注入刷新：推演完成后立即更新世界书条目
-            if (window.WORLD_ENGINE_BOOKINJECT) {
+            if (api.getSettings(true).injectIntoWorldbook !== false && window.WORLD_ENGINE_BOOKINJECT) {
               try { window.WORLD_ENGINE_BOOKINJECT.refreshNow(); } catch (e) {}
             }
             console.log('[世界引擎] ✅ 推演完成，当前第', state.round, '轮');
