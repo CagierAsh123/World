@@ -28,7 +28,16 @@ window.WORLD_ENGINE_BOOKINJECT = (function() {
   }
 
   function getCharName() {
-    try { return core().getUserName(); } catch (e) { return '未知角色'; }
+    try {
+      const ctx = getCtx();
+      // name2 = 角色名（卡的名字），name1 = 用户名
+      if (ctx?.name2) return ctx.name2;
+      const chid = ctx && ctx.characterId !== undefined ? ctx.characterId : undefined;
+      const characters = ctx?.characters || {};
+      const char = chid !== undefined ? characters[chid] : null;
+      if (char?.name) return char.name;
+    } catch (e) {}
+    return '未知角色';
   }
 
   function getCharPrimaryWorld() {
