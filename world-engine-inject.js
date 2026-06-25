@@ -167,6 +167,18 @@ window.WORLD_ENGINE_INJECT = (function() {
     }
     const blackboxText = boxParts.length ? boxParts.join(' | ') : '无暗面信息';
 
+    // 影响链：事件之间的因果传导
+    let influenceText = '无';
+    const chain = worldState.influenceChain || [];
+    if (chain.length) {
+      influenceText = chain.map(ic =>
+        `[${ic.trigger || '?'} → ${ic.impact || '?'}${ic.fallout ? ' → ' + ic.fallout : ''}]`
+      ).join('；');
+    }
+
+    // 账本：本轮重大变化
+    const ledgerText = ledger ? ledger.buildLedgerText(worldState) : '';
+
     const context = `
 【世界状态】
 轮次：${worldState.round}
@@ -175,11 +187,13 @@ window.WORLD_ENGINE_INJECT = (function() {
 事件链：${eventsText}
 势力：${factionsText}
 风声：${windsText}
+影响链：${influenceText}
 仇敌：${enemiesText}
 声誉：${repText}${repChange}
 经济：${econText}
 区域事件：${riText}
 黑盒：${blackboxText}
+${ledgerText ? '\n【重大事件记录】\n' + ledgerText : ''}
 
 ${rulesSummary}
     `.trim();
