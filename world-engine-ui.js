@@ -2849,8 +2849,7 @@ window.WORLD_ENGINE_UI = (function() {
           evolveTimeThreshold: Math.max(1, parseInt(gv('we-time-threshold')) || 1),
           evolveTimeMaxRounds: Math.max(1, parseInt(gv('we-time-maxrounds')) || 10)
         };
-        // a 不得超过 X（每次推演的轮数）
-        ns.evolveReadRounds = Math.min(ns.evolveReadRounds, ns.evolveEveryX);
+        // evolveReadRounds 不再钳位到 evolveEveryX，用户可按需独立设置
         window.WORLD_ENGINE_STORE.setItem('world_engine_settings', JSON.stringify(ns));
         if (window.WORLD_ENGINE_API) window.WORLD_ENGINE_API.getSettings(true);
 

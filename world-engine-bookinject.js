@@ -1,9 +1,7 @@
 // world-engine-bookinject.js — 注入世界状态为世界书条目（与黑科技同策略：constant 类型条目，绝对兼容）
 //
-// 策略：优先写入角色已有主世界书，没有才创建辅助世界书。
-//   - 角色有主世界书 → 在其中加一条 constant 条目
-//   - 角色无主世界书 → 新建「🌍 世界引擎 — {{char}}」辅助世界书
-//   - 条目按 comment 标识查找，不存在则创建，关了就打开，内容全量更新
+// 策略：始终使用独立辅助世界书「🌍 世界引擎 — {{char}}」
+//   绝不写入角色主世界书，避免与黑科技等扩展互相覆盖
 window.WORLD_ENGINE_BOOKINJECT = (function() {
   const BOOK_PREFIX = '🌍 世界引擎';
   const ENTRY_COMMENT = 'WorldEngine-LiveState';
@@ -40,16 +38,6 @@ window.WORLD_ENGINE_BOOKINJECT = (function() {
     return '未知角色';
   }
 
-  function getCharPrimaryWorld() {
-    try {
-      const ctx = getCtx();
-      if (!ctx || ctx.characterId == null) return null;
-      const characters = ctx.characters || {};
-      const char = characters[ctx.characterId];
-      return char?.data?.extensions?.world || null;
-    } catch (e) { return null; }
-  }
-
   function getCharFileName() {
     try {
       const ctx = getCtx();
@@ -60,47 +48,32 @@ window.WORLD_ENGINE_BOOKINJECT = (function() {
     } catch (e) { return null; }
   }
 
-  function fallbackBookName() {
+  function bookNameForChar() {
     return BOOK_PREFIX + ' — ' + getCharName();
   }
 
   // ========== 核心 ==========
 
-  // 决定用哪个世界书：优先角色主世界书，否则新建辅助世界书
-  // 返回 { bookName, data, entry }
+  // 始终使用独立辅助世界书，绝不写入角色主世界书（避免与黑科技等扩展互相覆盖）
   async function ensureEntry() {
     const m = await wi();
     const ctx = getCtx();
     if (!ctx || !ctx.chatId) return null;
 
-    const primaryWorld = getCharPrimaryWorld();
-    let bookName;
-    let isNewBook = false;
+    const bookName = bookNameForChar();
 
-    if (primaryWorld) {
-      // 角色有主世界书 → 直接用
-      bookName = primaryWorld;
-    } else {
-      // 无主世界书 → 新建辅助世界书
-      bookName = fallbackBookName();
-    }
-
-    // 1. 加载世界书
+    // 1. 加载或创建世界书
     let data = (m.worldInfoCache && m.worldInfoCache.has(bookName))
       ? m.worldInfoCache.get(bookName) : null;
     if (!data) data = await m.loadWorldInfo(bookName);
 
-    // 2. 不存在则创建
     if (!data) {
       console.log('[世界引擎][书注] 创建世界书:', bookName);
       data = { entries: {} };
       await m.saveWorldInfo(bookName, data, true);
       try { await m.updateWorldInfoList(); } catch (e) {}
-      isNewBook = true;
-    }
 
-    // 3. 新建的辅助世界书需绑定角色
-    if (!primaryWorld && isNewBook) {
+      // 绑定为角色辅助世界书
       const charFile = getCharFileName();
       if (charFile) {
         try { await m.charUpdateAddAuxWorld(charFile, bookName); } catch (e) {}
@@ -160,8 +133,7 @@ window.WORLD_ENGINE_BOOKINJECT = (function() {
   async function remove() {
     try {
       const m = await wi();
-      const primaryWorld = getCharPrimaryWorld();
-      const bookName = primaryWorld || fallbackBookName();
+      const bookName = bookNameForChar();
       let data = (m.worldInfoCache && m.worldInfoCache.has(bookName)) ? m.worldInfoCache.get(bookName) : null;
       if (!data) data = await m.loadWorldInfo(bookName);
       if (!data) return;
