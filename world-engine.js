@@ -193,7 +193,7 @@
             core.saveState(state);
           }
 
-          registerInjection(context);
+          await registerInjection(context);
           console.log(`[世界引擎] 注入完成 (round ${currentRound}, ${context.length} chars)${stateOverride ? ' [存档点]' : ''}`);
         } catch(e) {
           console.error('[世界引擎] 注入处理失败', e);
@@ -533,7 +533,7 @@
       }
 
       // 初始化时立即按对话层数选择注入状态
-      applyInjectionForCurrentRound();
+      await applyInjectionForCurrentRound();
       // 暴露按对话层数选择的注入入口供手动调用
       window.WORLD_ENGINE = { applyInjection: applyInjectionForCurrentRound, manualTimeEvolve };
 
