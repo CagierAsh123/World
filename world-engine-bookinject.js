@@ -1,10 +1,9 @@
 // world-engine-bookinject.js — 注入世界状态为世界书条目（与黑科技同策略：constant 类型条目，绝对兼容）
 //
-// 利用 SillyTavern 原生世界书引擎：
-//   - 为当前角色创建辅助世界书「🌍 世界引擎 — {{char}}」
-//   - 绑定为角色辅助世界书（不占用聊天世界书唯一槽位）
-//   - 在其中维护一条 type='constant' 条目，内容 = 世界状态全文
-//   - 每次推演完成 / 注入时即地检查：世界书不存在则创建，条目不存在/关闭则创建并打开
+// 策略：优先写入角色已有主世界书，没有才创建辅助世界书。
+//   - 角色有主世界书 → 在其中加一条 constant 条目
+//   - 角色无主世界书 → 新建「🌍 世界引擎 — {{char}}」辅助世界书
+//   - 条目按 comment 标识查找，不存在则创建，关了就打开，内容全量更新
 window.WORLD_ENGINE_BOOKINJECT = (function() {
   const BOOK_PREFIX = '🌍 世界引擎';
   const ENTRY_COMMENT = 'WorldEngine-LiveState';
@@ -32,6 +31,16 @@ window.WORLD_ENGINE_BOOKINJECT = (function() {
     try { return core().getUserName(); } catch (e) { return '未知角色'; }
   }
 
+  function getCharPrimaryWorld() {
+    try {
+      const ctx = getCtx();
+      if (!ctx || ctx.characterId == null) return null;
+      const characters = ctx.characters || {};
+      const char = characters[ctx.characterId];
+      return char?.data?.extensions?.world || null;
+    } catch (e) { return null; }
+  }
+
   function getCharFileName() {
     try {
       const ctx = getCtx();
@@ -42,47 +51,59 @@ window.WORLD_ENGINE_BOOKINJECT = (function() {
     } catch (e) { return null; }
   }
 
-  function bookName() {
+  function fallbackBookName() {
     return BOOK_PREFIX + ' — ' + getCharName();
   }
 
-  // ========== 核心：每次调用即地检查并修复 ==========
+  // ========== 核心 ==========
 
+  // 决定用哪个世界书：优先角色主世界书，否则新建辅助世界书
+  // 返回 { bookName, data, entry }
   async function ensureEntry() {
     const m = await wi();
     const ctx = getCtx();
     if (!ctx || !ctx.chatId) return null;
 
-    const name = bookName();
-    const charFile = getCharFileName();
+    const primaryWorld = getCharPrimaryWorld();
+    let bookName;
+    let isNewBook = false;
 
-    // 1. 加载世界书；不存在则创建
-    let data = m.worldInfoCache && m.worldInfoCache.has(name)
-      ? m.worldInfoCache.get(name) : null;
-    if (!data) data = await m.loadWorldInfo(name);
-    if (!data) {
-      console.log('[世界引擎][书注] 世界书不存在，创建:', name);
-      data = { entries: {} };
-      await m.saveWorldInfo(name, data, true);
-      // 刷新 UI 世界书列表（如果面板已打开）
-      try { await m.updateWorldInfoList(); } catch (e) {}
-      console.log('[世界引擎][书注] 世界书已创建');
+    if (primaryWorld) {
+      // 角色有主世界书 → 直接用
+      bookName = primaryWorld;
+    } else {
+      // 无主世界书 → 新建辅助世界书
+      bookName = fallbackBookName();
     }
 
-    // 2. 绑定为角色辅助世界书（幂等，内部 Set 去重）
-    if (charFile) {
-      try { await m.charUpdateAddAuxWorld(charFile, name); } catch (e) {
-        console.warn('[世界引擎][书注] 绑定辅助世界书失败:', e.message);
+    // 1. 加载世界书
+    let data = (m.worldInfoCache && m.worldInfoCache.has(bookName))
+      ? m.worldInfoCache.get(bookName) : null;
+    if (!data) data = await m.loadWorldInfo(bookName);
+
+    // 2. 不存在则创建
+    if (!data) {
+      console.log('[世界引擎][书注] 创建世界书:', bookName);
+      data = { entries: {} };
+      await m.saveWorldInfo(bookName, data, true);
+      try { await m.updateWorldInfoList(); } catch (e) {}
+      isNewBook = true;
+    }
+
+    // 3. 新建的辅助世界书需绑定角色
+    if (!primaryWorld && isNewBook) {
+      const charFile = getCharFileName();
+      if (charFile) {
+        try { await m.charUpdateAddAuxWorld(charFile, bookName); } catch (e) {}
       }
     }
 
-    // 3. 查找或创建条目
+    // 4. 查找或创建条目
     let entry = Object.values(data.entries || {}).find(e => e && e.comment === ENTRY_COMMENT);
     if (!entry) {
-      entry = m.createWorldInfoEntry(name, data);
+      entry = m.createWorldInfoEntry(bookName, data);
       if (!entry) return null;
       entry.comment = ENTRY_COMMENT;
-      entry.content = '';
       entry.constant = true;
       entry.disable = false;
       entry.preventRecursion = true;
@@ -91,16 +112,17 @@ window.WORLD_ENGINE_BOOKINJECT = (function() {
       entry.depth = m.DEFAULT_DEPTH || 4;
       entry.key = ['WorldEngine-LiveState-Key'];
       entry.selective = false;
-      console.log('[世界引擎][书注] 创建条目 uid=' + entry.uid);
+      console.log('[世界引擎][书注] 在「' + bookName + '」中创建条目 uid=' + entry.uid);
+      // 新建条目后保存，确保下次 loadWorldInfo 能读到
+      await m.saveWorldInfo(bookName, data, true);
     }
 
-    // 4. 条目被关了就打开
+    // 5. 条目关了则打开
     if (entry.disable) {
       entry.disable = false;
-      console.log('[世界引擎][书注] 重新启用条目');
     }
 
-    return { data, entry };
+    return { bookName, data, entry };
   }
 
   // ========== 公开 API ==========
@@ -114,9 +136,11 @@ window.WORLD_ENGINE_BOOKINJECT = (function() {
 
       res.entry.content = content;
       const m = await wi();
-      await m.saveWorldInfo(bookName(), res.data, true);
+      await m.saveWorldInfo(res.bookName, res.data, true);
+      // 自动刷新世界书 UI 列表
+      try { await m.updateWorldInfoList(); } catch (e) {}
       _lastContent = content;
-      console.log('[世界引擎][书注] 注入完成 (' + content.length + ' chars)');
+      console.log('[世界引擎][书注] 注入完成 (' + content.length + ' chars) → ' + res.bookName);
       return true;
     } catch (e) {
       console.warn('[世界引擎][书注] 注入失败:', e.message);
@@ -127,15 +151,16 @@ window.WORLD_ENGINE_BOOKINJECT = (function() {
   async function remove() {
     try {
       const m = await wi();
-      const name = bookName();
-      let data = (m.worldInfoCache && m.worldInfoCache.has(name)) ? m.worldInfoCache.get(name) : null;
-      if (!data) data = await m.loadWorldInfo(name);
+      const primaryWorld = getCharPrimaryWorld();
+      const bookName = primaryWorld || fallbackBookName();
+      let data = (m.worldInfoCache && m.worldInfoCache.has(bookName)) ? m.worldInfoCache.get(bookName) : null;
+      if (!data) data = await m.loadWorldInfo(bookName);
       if (!data) return;
       const entry = Object.values(data.entries || {}).find(e => e && e.comment === ENTRY_COMMENT);
       if (entry && !entry.disable) {
         entry.disable = true;
         entry.content = '';
-        await m.saveWorldInfo(name, data, true);
+        await m.saveWorldInfo(bookName, data, true);
         _lastContent = '';
       }
     } catch (e) {}
