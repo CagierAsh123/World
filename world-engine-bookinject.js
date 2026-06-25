@@ -1,8 +1,8 @@
-// world-engine-bookinject.js — 注入世界状态为聊天世界书条目（与黑科技同策略：constant 类型条目，绝对兼容）
+// world-engine-bookinject.js — 注入世界状态为世界书条目（与黑科技同策略：constant 类型条目，绝对兼容）
 //
-// 替代旧的 extension prompt 注入方式。利用 SillyTavern 原生世界书引擎：
-//   - 创建独立世界书「🌍 世界引擎·实时注入」
-//   - 赋值给当前聊天（chat_metadata['world_info']），仅当前聊天生效
+// 利用 SillyTavern 原生世界书引擎：
+//   - 为当前角色创建辅助世界书「🌍 世界引擎 — {{char}}」
+//   - 绑定为角色辅助世界书（不占用聊天世界书唯一槽位）
 //   - 在其中维护一条 type='constant' 条目，内容 = 世界状态全文
 //   - SillyTavern 原生扫描引擎无条件注入 constant 条目，不走扩展 prompt 通道
 //
@@ -10,15 +10,15 @@
 //   - 推演完成后立刻刷新（world-engine.js performEvolution 后调用）
 //   - UI 编辑状态后通过 store 包装层去抖刷新
 window.WORLD_ENGINE_BOOKINJECT = (function() {
-  const BOOK_NAME = '🌍 世界引擎·实时注入';
+  const BOOK_PREFIX = '🌍 世界引擎';
   const ENTRY_COMMENT = 'WorldEngine-LiveState';
-  const METADATA_KEY = 'world_info';  // chat_metadata 中指向聊天世界书的键
 
   let _ready = false;
   let _bookCache = null;        // 世界书 data 对象引用
   let _entryUid = null;         // 当前条目的 uid
   let _lastContent = '';        // 上次写入的内容，用于去重
-  let _assignedChatId = null;   // 上次赋值的聊天 id，切聊天时需重新赋值
+  let _assignedCharId = null;   // 上次绑定的角色 id，切角色时需重新绑定
+  let _bookName = null;         // 当前世界书名（含角色名）
   let _refreshTimer = null;
   const REFRESH_DELAY = 800;    // UI 编辑去抖
 
@@ -39,51 +39,73 @@ window.WORLD_ENGINE_BOOKINJECT = (function() {
     try { return SillyTavern.getContext(); } catch (e) { return null; }
   }
 
-  // 确保专用世界书存在且赋值给当前聊天
+  function getCharName() {
+    try {
+      const ctx = getCtx();
+      if (ctx) return core().getUserName();
+    } catch (e) {}
+    return '未知角色';
+  }
+
+  function getCharFileName() {
+    try {
+      const ctx = getCtx();
+      const chid = ctx && ctx.characterId !== undefined ? ctx.characterId : undefined;
+      if (chid === undefined) return null;
+      if (typeof getCharaFilename === 'function') {
+        return getCharaFilename(chid);
+      }
+      const char = ctx.characters && ctx.characters[chid];
+      if (char && char.name) return char.name;
+    } catch (e) {}
+    return null;
+  }
+
+  function bookNameForChar() {
+    return BOOK_PREFIX + ' — ' + getCharName();
+  }
+
+  // 确保专用世界书存在且已绑定为角色辅助世界书
   async function ensureBook() {
     const m = await wi();
     const ctx = getCtx();
     if (!ctx || !ctx.chatId) {
-      console.warn('[世界引擎][书注] 无聊天上下文，跳过世界书初始化');
+      console.warn('[世界引擎][书注] 无聊天上下文，跳过初始化');
       return null;
     }
+
+    _bookName = bookNameForChar();
+    const charFileName = getCharFileName();
 
     // 加载或创建世界书
-    let data = m.worldInfoCache && m.worldInfoCache.has(BOOK_NAME)
-      ? m.worldInfoCache.get(BOOK_NAME) : null;
+    let data = m.worldInfoCache && m.worldInfoCache.has(_bookName)
+      ? m.worldInfoCache.get(_bookName) : null;
     if (!data) {
-      data = await m.loadWorldInfo(BOOK_NAME);
-      console.log('[世界引擎][书注] loadWorldInfo 结果:', data ? '已加载' : '不存在');
+      data = await m.loadWorldInfo(_bookName);
+      console.log('[世界引擎][书注] loadWorldInfo(' + _bookName + '):', data ? '已加载' : '不存在');
     }
     if (!data) {
-      console.log('[世界引擎][书注] 创建世界书:', BOOK_NAME);
-      const created = await m.createNewWorldInfo(BOOK_NAME);
+      console.log('[世界引擎][书注] 创建世界书:', _bookName);
+      const created = await m.createNewWorldInfo(_bookName);
       console.log('[世界引擎][书注] createNewWorldInfo 结果:', created);
-      data = m.worldInfoCache && m.worldInfoCache.has(BOOK_NAME)
-        ? m.worldInfoCache.get(BOOK_NAME)
-        : await m.loadWorldInfo(BOOK_NAME);
+      data = m.worldInfoCache && m.worldInfoCache.has(_bookName)
+        ? m.worldInfoCache.get(_bookName)
+        : await m.loadWorldInfo(_bookName);
     }
     if (!data) {
-      console.warn('[世界引擎][书注] 无法加载或创建世界书');
+      console.warn('[世界引擎][书注] 无法加载或创建世界书:', _bookName);
       return null;
     }
 
-    // 赋值给当前聊天（切聊天时需重新赋值）
-    if (_assignedChatId !== ctx.chatId) {
-      const md = ctx.chatMetadata || {};
-      if (md[METADATA_KEY] !== BOOK_NAME) {
-        md[METADATA_KEY] = BOOK_NAME;
-        if (typeof ctx.updateChatMetadata === 'function') {
-          ctx.updateChatMetadata({ [METADATA_KEY]: BOOK_NAME });
-        } else {
-          ctx.chatMetadata = md;
-        }
-        if (typeof ctx.saveMetadata === 'function') {
-          ctx.saveMetadata();
-        }
-        console.log('[世界引擎][书注] 已赋值聊天世界书:', BOOK_NAME);
+    // 绑定为角色辅助世界书（支持多个，不占聊天世界书唯一槽）
+    if (charFileName && _assignedCharId !== ctx.characterId) {
+      try {
+        await m.charUpdateAddAuxWorld(charFileName, _bookName);
+        _assignedCharId = ctx.characterId;
+        console.log('[世界引擎][书注] 已绑定辅助世界书到角色:', getCharName());
+      } catch (e) {
+        console.warn('[世界引擎][书注] 绑定角色失败（非致命）:', e.message);
       }
-      _assignedChatId = ctx.chatId;
     }
 
     _bookCache = data;
@@ -103,7 +125,7 @@ window.WORLD_ENGINE_BOOKINJECT = (function() {
 
   async function createEntry(data) {
     const m = await wi();
-    const entry = m.createWorldInfoEntry(BOOK_NAME, data);
+    const entry = m.createWorldInfoEntry(_bookName, data);
     if (!entry) return null;
 
     entry.comment = ENTRY_COMMENT;
@@ -119,13 +141,13 @@ window.WORLD_ENGINE_BOOKINJECT = (function() {
 
     _entryUid = entry.uid;
     _bookCache = data;
-    console.log('[世界引擎][书注] 创建常量条目 uid=' + entry.uid);
+    console.log('[世界引擎][书注] 创建常量条目 uid=' + entry.uid + ', disable=' + entry.disable);
     return entry;
   }
 
   // ========== 公开 API ==========
 
-  // 初始化：确保世界书、赋值聊天、条目就绪
+  // 初始化：确保世界书、绑定角色、条目就绪
   async function init() {
     try {
       const data = await ensureBook();
@@ -136,7 +158,7 @@ window.WORLD_ENGINE_BOOKINJECT = (function() {
         entry = await createEntry(data);
         if (!entry) return;
         const m = await wi();
-        await m.saveWorldInfo(BOOK_NAME, data, true);
+        await m.saveWorldInfo(_bookName, data, true);
       }
       _ready = true;
       console.log('[世界引擎][书注] 初始化完成');
@@ -157,7 +179,6 @@ window.WORLD_ENGINE_BOOKINJECT = (function() {
       const m = await wi();
       const data = _bookCache;
 
-      // 条目可能被外部删除，重新查找或创建
       let entry = data.entries && data.entries[_entryUid];
       if (!entry) {
         entry = await findEntry(data);
@@ -173,7 +194,7 @@ window.WORLD_ENGINE_BOOKINJECT = (function() {
       }
 
       entry.content = content;
-      await m.saveWorldInfo(BOOK_NAME, data, true);
+      await m.saveWorldInfo(_bookName, data, true);
       _lastContent = content;
       console.log('[世界引擎][书注] 注入完成 (' + content.length + ' chars)');
       return true;
@@ -192,7 +213,7 @@ window.WORLD_ENGINE_BOOKINJECT = (function() {
       if (entry) {
         entry.content = '';
         entry.disable = true;
-        await m.saveWorldInfo(BOOK_NAME, _bookCache, true);
+        await m.saveWorldInfo(_bookName, _bookCache, true);
         _lastContent = '';
         console.log('[世界引擎][书注] 已移除注入内容');
       }
@@ -206,9 +227,9 @@ window.WORLD_ENGINE_BOOKINJECT = (function() {
     if (!_ready) {
       try { await init(); } catch (e) { return; }
     }
-    // 切聊天后重新赋值
     const ctx = getCtx();
-    if (ctx && ctx.chatId !== _assignedChatId) {
+    // 切角色后重新绑定
+    if (ctx && ctx.characterId !== _assignedCharId) {
       try { await ensureBook(); } catch (e) {}
     }
     try {
@@ -227,7 +248,6 @@ window.WORLD_ENGINE_BOOKINJECT = (function() {
     }
   }
 
-  // 去抖刷新：store 写入后延迟调用，合并连续 UI 编辑
   function scheduleRefresh() {
     if (_refreshTimer) clearTimeout(_refreshTimer);
     _refreshTimer = setTimeout(() => {
