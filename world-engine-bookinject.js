@@ -180,7 +180,12 @@ window.WORLD_ENGINE_BOOKINJECT = (function() {
       const ctx = getCtx();
       if (!ctx) return;
       const state = core().hasState() ? core().loadState() : null;
-      if (!state || state.round === 0) return;
+
+      // 新聊天未推演 → 清掉旧聊天残留的条目
+      if (!state || state.round === 0) {
+        await remove();
+        return;
+      }
 
       const tags = [];
       for (const ev of state.events || []) tags.push(ev.name);
