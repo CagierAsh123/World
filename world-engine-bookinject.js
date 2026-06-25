@@ -43,17 +43,22 @@ window.WORLD_ENGINE_BOOKINJECT = (function() {
   async function ensureBook() {
     const m = await wi();
     const ctx = getCtx();
-    if (!ctx || !ctx.chatId) return null;
+    if (!ctx || !ctx.chatId) {
+      console.warn('[世界引擎][书注] 无聊天上下文，跳过世界书初始化');
+      return null;
+    }
 
     // 加载或创建世界书
     let data = m.worldInfoCache && m.worldInfoCache.has(BOOK_NAME)
       ? m.worldInfoCache.get(BOOK_NAME) : null;
     if (!data) {
       data = await m.loadWorldInfo(BOOK_NAME);
+      console.log('[世界引擎][书注] loadWorldInfo 结果:', data ? '已加载' : '不存在');
     }
     if (!data) {
       console.log('[世界引擎][书注] 创建世界书:', BOOK_NAME);
-      await m.createNewWorldInfo(BOOK_NAME);
+      const created = await m.createNewWorldInfo(BOOK_NAME);
+      console.log('[世界引擎][书注] createNewWorldInfo 结果:', created);
       data = m.worldInfoCache && m.worldInfoCache.has(BOOK_NAME)
         ? m.worldInfoCache.get(BOOK_NAME)
         : await m.loadWorldInfo(BOOK_NAME);

@@ -69,9 +69,9 @@
         window.WORLD_ENGINE_CHATCACHE.init();
       }
 
-      // 世界书注入：初始化专用世界书与常量条目（不阻塞）
+      // 世界书注入：初始化专用世界书与常量条目
       if (window.WORLD_ENGINE_BOOKINJECT) {
-        try { window.WORLD_ENGINE_BOOKINJECT.init(); } catch (e) { console.warn('[世界引擎] 世界书注入初始化失败（非致命）', e); }
+        try { await window.WORLD_ENGINE_BOOKINJECT.init(); } catch (e) { console.warn('[世界引擎] 世界书注入初始化失败（非致命）', e); }
         // 监听 store 写入，UI 编辑后自动刷新世界书条目
         try { window.WORLD_ENGINE_BOOKINJECT.installStoreListener(); } catch (e) {}
       }
